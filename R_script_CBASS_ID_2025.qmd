@@ -1,0 +1,4289 @@
+---
+title: "Depth-associated differences in coral thermal tolerance under standardized heat-light assays"
+author: "Marlen Schlotheuber"
+format: html
+---
+
+# R code for Manuscript: Depth-associated differences in coral thermal tolerance under standardized heat-light assays
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+if(!require(devtools)){
+   install.packages("devtools")
+}
+
+devtools::install_github("reefgenomics/CBASSED50@0.1.5.1", force=TRUE)
+install.packages("CBASSED50")
+```
+
+You can add options to executable code like this
+
+```{r}
+# install packages
+install.packages("remotes")
+remotes::install_github("pmartinezarbizu/pairwiseAdonis/pairwiseAdonis")
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("dada2")
+BiocManager::install("dada2", force = TRUE)
+install.packages(c("cubature", "ape", "reshape2", "edgeR", "plyr"))
+install.packages("dada2")
+install.packages("Rcpp")
+BiocManager::install("Biostrings")
+# Install phyloseq
+BiocManager::install("phyloseq")
+install.packages("permuco")
+install.packages("lmPerm")
+
+# load papers
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readxl)
+library(rstudioapi)
+library(RColorBrewer)
+library(CBASSED50)
+library(tidyverse)
+library(broom)
+library(mgcv)
+library(patchwork)
+
+library(stringr)
+library(scales)
+library(openxlsx)
+library(dada2)
+library(Rcpp)
+library(phyloseq)
+library(Biostrings)
+library(reshape2)
+
+library(readr)
+library(stringr)
+library(ggridges)
+library(rnaturalearth)
+library(car)
+library(scales)
+library(dplyr)
+library(tidyr)
+library(vegan)
+library(tibble)
+library(glue)
+library(stringr)
+library(devtools)
+library(pairwiseAdonis)
+library(emmeans)
+library(microbiome)
+library(ANCOMBC)
+library(gsl)
+library(readr)
+library(readxl)
+library(ggplot2)
+
+library(ggrepel)
+library(ggpubr)
+library(ggvenn)
+library(indicspecies)
+library(MASS)
+library(permuco)
+library(lmPerm)
+library(coin)
+
+
+```
+
+# Figure 1A: Study region and depth location
+
+```{r}
+# Study 
+# Get country boundaries
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Subset for Indonesia and Malaysia
+countries <- world[world$name %in% c("Indonesia", "Malaysia"), ]
+
+# plot
+Fig1A_map <-  ggplot() +
+  geom_sf(data = world, fill = "white", color = "black") +
+  geom_sf(data = subset(countries, name == "Indonesia"), fill = "white", color = "black") +
+  geom_sf(data = subset(countries, name == "Malaysia"), fill = "white", color = "black") +
+  ggtitle("Sampling sites: Indonesia") +
+  coord_sf(xlim = c(110, 125), ylim = c(-15,0), expand = FALSE) +
+  scale_x_continuous(name = "Longitude (°E)", breaks = seq(90, 155, 10)) +
+  scale_y_continuous(name = "Latitude (°N)", breaks = seq(-35, 35, 10)) +
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "grey90", color = NA),  # ocean
+    plot.background  = element_rect(fill = "white", color = NA),   # outer plot bg
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+
+Fig1A_map
+
+# plot
+Fig1A_map <-  ggplot() +
+  geom_sf(data = world, fill = "white", color = "black") +
+  geom_sf(data = subset(countries, name == "Indonesia"), fill = "white", color = "black") +
+  geom_sf(data = subset(countries, name == "Malaysia"), fill = "white", color = "black") +
+  ggtitle("Sampling sites: Indonesia") +
+  coord_sf(xlim = c(115, 120), ylim = c(-10,-7), expand = FALSE) +
+  scale_x_continuous(name = "Longitude (°E)", breaks = seq(90, 155, 10)) +
+  scale_y_continuous(name = "Latitude (°N)", breaks = seq(-35, 35, 10)) +
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "grey90", color = NA),  # ocean
+    plot.background  = element_rect(fill = "white", color = NA),   # outer plot bg
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+
+Fig1A_map
+```
+
+# Upload data and prepare for plotting
+
+CoralFuture was used to calculate EDs (ED5, ED50, ED95) using the photosynthetic efficiency data
+
+```{r}
+#  CoralFuture was used to calculate EDs: ED5, ED50, ED95 and tables are provided in Supplementary Data Sheet 1
+
+# Upload Supplementary Excel File: Supplementary Data Sheet 1 ID25.xlsx
+input_data_path <- selectFile(
+  caption = "Select XLSX Input File"
+)
+
+# Porites EDs data
+eds_porites  <- read_excel(input_data_path, sheet = "Data S1. Plob")
+pam_porites <- read_excel(input_data_path, sheet = "Data S3. PAM Plob")
+
+# change column names of EDs table so it fits to PAM table
+eds_porites <- eds_porites %>%
+  dplyr::rename(
+    ED5 = "ED5 [°C]",
+    ED50 = "ED50 [°C]",
+    ED95 = "ED95 [°C]",
+    decline_width = "Decline width [°C]",
+    Genotype = "Colony no.",
+    Depth = "Depth [m]"
+  )
+
+# remove the last 4 columns with the calculated mean
+eds_porites <- eds_porites[, 1:(ncol(eds_porites) - 4)]
+
+# create long format dataframe
+eds_porites_long <- eds_porites %>%
+  pivot_longer(cols = c(ED5, ED50, ED95),
+               names_to = "ED_type",
+               values_to = "ED_value")
+
+
+# Upload Supplementary Excel File: Supplementary Data Sheet 1 ID25.xlsx
+input_data_path <- selectFile(
+  caption = "Select XLSX Input File"
+)
+
+# Pocillopora EDs data
+eds_poc <- read_excel(input_data_path, sheet = "Data S2. Pdam")
+pam_poc <- read_excel(input_data_path, sheet = "Data S4. PAM Pdam")
+
+
+# change column names of EDs table so it fits to PAM table
+eds_poc <- eds_poc %>%
+  dplyr::rename(
+    ED5 = "ED5 [°C]",
+    ED50 = "ED50 [°C]",
+    ED95 = "ED95 [°C]",
+    decline_width = "Decline width [°C]",
+    Genotype = "Colony no.",
+        Depth = "Depth [m]"
+  )
+
+# remove the last 4 columns with the calculated mean
+eds_poc <- eds_poc[, 1:(ncol(eds_poc) - 4)]
+
+# create long format dataframe
+eds_poc_long <- eds_poc %>%
+  pivot_longer(cols = c(ED5, ED50, ED95),
+               names_to = "ED_type",
+               values_to = "ED_value")
+
+
+# merge poci and porites eds data frame for plotting
+eds_combined <- bind_rows(eds_porites, eds_poc)
+cbass_combined <- bind_rows(pam_porites, pam_poc)
+```
+
+## Figure 2A: Photosynthetic efficiency and EDs of *Porites cf. lobata* and *Pocillopora cf. damicornis* from the shallow and deeper depth
+
+```{r}
+# Write Species name out for data anlysis and visualization
+eds_combined$Species <- dplyr::recode(
+  eds_combined$Species,
+  "Porites cf. lobata" = "Porites lobata",
+  "Pocillopora cf. damicornis" = "Pocillopora damicornis"
+)
+# sort coral species
+eds_combined$Species <- factor(
+  eds_combined$Species,
+  levels = c("Porites lobata", "Pocillopora damicornis")
+)
+
+# sort reef location
+eds_combined$Condition <- factor(
+  eds_combined$Condition,
+  levels = c("shallow", "deep")
+)
+
+# check out
+# calculate mean ED5, ED50, ED95 for species and condition and create new dataframe
+mean_eds_df_all <- eds_combined %>%
+  group_by(Species, Condition) %>%
+  summarise(
+    n = n(),
+    mean_ED5  = round(mean(ED5,  na.rm = TRUE), 2),
+    mean_ED50 = round(mean(ED50, na.rm = TRUE), 2),
+    mean_ED95 = round(mean(ED95, na.rm = TRUE), 2),
+    mean_DW = round(mean(decline_width, na.rm = TRUE), 2),
+    .groups = "drop"
+  )
+
+mean_eds_df_all
+
+# Convert to long format for plotting vertical lines
+mean_eds_long <- mean_eds_df_all %>%
+  pivot_longer(
+    cols = c(mean_ED5, mean_ED50, mean_ED95),
+    names_to = "ED_level",
+    values_to = "ED"
+  )
+
+# cbass script for the PAM temperature curve with confidence interval
+cbass_dataset <- preprocess_dataset(cbass_combined)
+validate_cbass_dataset(cbass_dataset)
+
+grouping_properties <- c("Condition", "Species")
+drm_formula <- "Pam_value ~ Temperature"
+models <- fit_drms(cbass_dataset, grouping_properties, drm_formula, is_curveid = TRUE)
+
+eds <- get_all_eds_by_grouping_property(models)
+cbass_dataset <- define_grouping_property(cbass_dataset, grouping_properties) %>%
+  mutate(GroupingProperty = paste(GroupingProperty, Genotype, sep = "_"))
+
+eds_df <- 
+  left_join(eds, cbass_dataset, by = "GroupingProperty") %>%
+  dplyr::select(names(eds), all_of(grouping_properties)) %>%
+  distinct()
+
+
+# preparation for the predict PAM values
+models <- fit_drms(cbass_dataset, grouping_properties, drm_formula, is_curveid = FALSE, LL.4 = FALSE)
+
+
+# The default number of values for range of temperatures is 100
+temp_ranges <- define_temperature_ranges(cbass_dataset$Temperature, n=100)
+predictions <- get_predicted_pam_values(models, temp_ranges)
+
+# predictions
+predictions_df <- 
+  left_join(predictions,
+            define_grouping_property(cbass_dataset, grouping_properties) %>% 
+              dplyr::select(c(all_of(grouping_properties), GroupingProperty)),
+            by = "GroupingProperty",
+            relationship = "many-to-many") %>%
+  distinct()
+
+#prepare summary dataframe for plotting
+summary_eds_df <- eds_df %>%
+ group_by(Condition, Species) %>%
+    summarise(Mean_ED5 = mean(ED5),
+            SD_ED5 = sd(ED5),
+            SE_ED5 = sd(ED5) / sqrt(n()),
+            Conf_Int_5 = qt(0.975, df = n() - 1) * SE_ED5,
+            Mean_ED50 = mean(ED50),
+            SD_ED50 = sd(ED50),
+            SE_ED50 = sd(ED50) / sqrt(n()),
+            Conf_Int_50 = qt(0.975, df = n() - 1) * SE_ED50,
+            Mean_ED95 = mean(ED95),
+            SD_ED95 = sd(ED95),
+            SE_ED95 = sd(ED95) / sqrt(n()),
+            # The value 0.975 corresponds to the upper tail probability
+            # for a two-tailed t-distribution with a 95%
+            Conf_Int_95 = qt(0.975, df = n() - 1) * SE_ED95) %>%
+  mutate(across(c(Mean_ED50, SD_ED50, SE_ED50,
+                  Mean_ED5, SD_ED5, SE_ED5,
+                  Mean_ED95, SD_ED95, SE_ED95,
+                  Conf_Int_5,Conf_Int_50,Conf_Int_95), ~round(., 2)))
+
+summary_eds_df
+
+# create result data frame
+result_df <- predictions_df %>%
+  left_join(summary_eds_df, by = c("Condition", "Species"))
+
+
+# calculate decline width and create new dataframe
+decline_width_df <- summary_eds_df %>%
+  mutate(
+    decline_width = Mean_ED95 - Mean_ED5
+  ) %>%
+  dplyr::select(Species, Condition, Mean_ED5, Mean_ED95, decline_width)
+
+# prepare for plotting
+decline_width_rect <- decline_width_df %>%
+  mutate(
+    xmin = Mean_ED5,
+    xmax = Mean_ED95,
+    ymin = -Inf,
+    ymax = Inf
+  )
+
+# stack
+decline_bar <- summary_eds_df %>%
+  mutate(
+    xmin = Mean_ED5,
+    xmax = Mean_ED95,
+    
+    # stack vertically instead of overlapping
+    ymin = ifelse(Condition == "shallow", 0.80, 0.83),
+    ymax = ifelse(Condition == "shallow", 0.825, 0.855)
+  )
+
+# sort coral species
+result_df$Species <- factor(
+  result_df$Species,
+  levels = c("Plob", "Pdam")
+)
+
+
+# CHECK OUT wihtout predictions
+# visualize temperature response curve: one curve per species x depth
+exploratory_curve <-
+  ggplot(data = cbass_dataset,
+         aes(
+           x = Temperature,
+           y = Pam_value,
+           group = Condition,
+           color = Condition)) +
+  geom_smooth(
+    method = drc::drm,
+    method.args = list(fct = drc::LL.3()),
+    formula = y ~ x,
+    se = FALSE,
+    linewidth = 0.7
+  ) +
+  geom_point(size = 1.5, alpha = 0.6) +
+  facet_wrap(~ Species) +
+  scale_color_manual(
+    name = "Reef depth",
+    values = c(shallow = "lightblue", deep = "navy")
+  ) +
+  labs(
+    x = "Temperature [°C]",
+    y = "Photosynthetic efficiency (Fv/Fm)"
+  ) +
+  theme_bw()
+
+exploratory_curve
+
+
+
+
+# plot
+tempresp_curve <- ggplot(
+  result_df,
+  aes(
+    x = Temperature,
+    y = PredictedPAM,
+    group = GroupingProperty,
+    color = Condition
+  ))+
+  # decline width bars
+  geom_rect(
+    data = decline_bar,
+    aes(
+      xmin = xmin,
+      xmax = xmax,
+      ymin = ymin,
+      ymax = ymax,
+      fill = Condition
+    ),
+    inherit.aes = FALSE,
+    alpha = 0.9
+  ) +
+
+  # confidence interval
+  geom_ribbon(
+    aes(
+      ymin = Upper,
+      ymax = Lower,
+      fill = Condition
+    ),
+    alpha = 0.2,
+    color = NA
+  ) +
+
+  # fitted curve
+  geom_line(
+    linewidth = 1
+  ) +
+
+  # raw data
+  geom_point(
+    data = cbass_dataset,
+    aes(
+      x = Temperature,
+      y = Pam_value,
+      color = Condition
+    ),
+    inherit.aes = FALSE,
+    size = 1.5,
+    alpha = 0.6
+  ) +
+
+  # ED5
+  geom_vline(
+    aes(
+      xintercept = Mean_ED5,
+      color = Condition
+    ),
+    linetype = "dashed",
+    linewidth = 0.3
+  ) +
+
+  geom_text(
+    aes(
+      x = Mean_ED5,
+      y = 0.68,
+      label = paste0("ED5")
+    ),
+    angle = 0,
+    size = 3,
+    fontface = "bold",
+    show.legend = FALSE
+  ) +
+
+  # ED50
+  geom_vline(
+    aes(
+      xintercept = Mean_ED50,
+      color = Condition
+    ),
+    linetype = "dashed",
+    linewidth = 0.3
+  ) +
+
+  geom_text(
+    aes(
+      x = Mean_ED50,
+      y = 0.68,
+      label = paste0("ED50")
+    ),
+    angle = 0,
+    size = 3,
+    fontface = "bold",
+    show.legend = FALSE
+  ) +
+
+  # ED95
+  geom_vline(
+    aes(
+      xintercept = Mean_ED95,
+      color = Condition
+    ),
+    linetype = "dashed",
+    linewidth = 0.3
+  ) +
+
+  geom_text(
+    aes(
+      x = Mean_ED95,
+      y = 0.68,
+      label = paste0("ED95")
+    ),
+    angle = 0,
+    size = 3,
+    fontface = "bold",
+    show.legend = FALSE
+  ) +
+facet_wrap( ~ Species,
+  labeller = labeller(
+    Species = c(
+      Plob = "italic('Porites cf. lobata')",
+      Pdam = "italic('Pocillopora cf. damicornis')"
+    ),
+    .default = label_parsed
+  )
+)+
+
+  scale_color_manual(
+    name = "Reef depth",
+    values = c(
+      shallow = "lightblue",
+      deep = "navy"
+    )
+  ) +
+
+  scale_fill_manual(
+    values = c(
+      shallow = "lightblue",
+      deep = "darkblue"
+    ),
+    guide = "none"
+  ) +
+
+  scale_y_continuous(
+    limits = c(-0.02, 0.9),
+    breaks = seq(0, 0.8, 0.2),
+    expand = expansion(mult = c(0.02, 0.05))
+  ) +
+
+  scale_x_continuous(
+  breaks = c(28, 34, 37, 39),
+  labels = c("28", "34", "37", "39")
+) +
+  
+  labs(
+    x = "Temperature [°C]",
+    y = expression("Photosynthetic efficiency [Fv/Fm]")
+  ) +
+
+  theme_bw() +
+
+  theme(
+    legend.position = "bottom",
+    legend.box = "vertical",
+
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank(),
+
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(
+      face = "bold",
+      size = 12
+    ),
+
+    axis.text = element_text(size = 11),
+    axis.title = element_text(size = 13)
+  )
+
+tempresp_curve
+
+
+# save as pdf
+ggsave('/pathname/Fig1A_CBASS_PAM_EDs.pdf', plot = tempresp_curve, width = 12, height = 6, dpi = 300, bg = "white")
+
+```
+
+## Figure 2B: Visual Bleaching Assessment
+
+```{r}
+# VBA data
+# Upload Supplementary Excel File: Supplementary Data Sheet 1 ID25.xlsx
+inout_path <- selectFile(
+  caption = "Select XLSX Input File"
+)
+
+vba_data <- read_excel(input_data_path, sheet = "Data S5. VBA")
+
+# change column names of EDs table so it fits to PAM table
+vba_data <- vba_data %>%
+  rename(
+    VBA_1 = "VBA1 [%]",
+    VBA_2 = "VBA2 [%]",
+    VBA_3 = "VBA3 [%]",
+    Pigmentation = "Pigmentation [%]",
+    Pigmentation_retention = "Pigmentation Retention [%]")
+
+# pigmentation retention was calculated before: (T420/T0)*100 because this describes the rention while T0-T420 is the pigmentation loss.
+
+# Write Species name out for data anlysis and visualization
+vba_data$Species <- dplyr::recode(
+  vba_data$Species,
+  "Plob" = "Porites cf. lobata",
+  "Pdam" = "Pocillopora cf. damicornis"
+)
+
+# we are only interesting in the pigmentation retention (T0-T420) so we can remove the additional rows of T420
+vba_data <- vba_data %>%
+  filter(Timepoint == 0)
+
+# make sure pigmentation is not above 100%
+vba_data <- vba_data %>%
+  mutate(Pigmentation_retention = ifelse(Pigmentation_retention > 100, 100, Pigmentation_retention))
+
+# prepare for plotting
+mean_pigmentation_retention <- vba_data %>%
+  group_by(Species, Temperature, Condition) %>%
+  summarise(
+    mean_pigmentation_retention = round(mean(Pigmentation_retention, na.rm = TRUE),0),
+    .groups = "drop"
+  )
+
+# ensure correct order of factors
+vba_data <- vba_data %>%
+  mutate(
+    Condition = factor(Condition, levels = c("shallow", "deep")),
+    Species = factor(
+      Species,
+      levels = c("Porites cf. lobata", "Pocillopora cf. damicornis")
+    )
+  )
+
+# ensure same order in summary data: Species
+mean_pigmentation_retention <- mean_pigmentation_retention %>%
+  mutate(
+    Species = factor(
+      Species,
+      levels = c("Porites cf. lobata", "Pocillopora cf. damicornis")
+    )
+  )
+# Condition order
+mean_pigmentation_retention <- mean_pigmentation_retention %>%
+  mutate(
+    Condition = factor(
+      Condition,
+  
+      levels = c("shallow", "deep")
+    )
+  )
+
+# plot
+boxplot_pigmentation <- ggplot(vba_data,aes(x=factor(Temperature),y=Pigmentation_retention,fill=Condition))+
+geom_boxplot(alpha=0.6,outlier.shape=NA,position=position_dodge(width=0.75))+
+geom_point(size=0.5,alpha=0.8,aes(color=Condition),position=position_dodge(width=0.75))+
+geom_text(data=mean_pigmentation_retention,aes(x=factor(Temperature),y=Inf,label=paste0(round(mean_pigmentation_retention,2)," %"),color=Condition),position=position_dodge(width=0.75),vjust=1.6,fontface="bold",size=3.3,show.legend=FALSE)+
+scale_fill_manual(name="Depth location",breaks=c("shallow","deep"),values=c("shallow"="lightblue","deep"="darkblue"),labels=c("Shallow (1–3 m)","Deeper (6–12 m)"))+
+scale_color_manual(breaks=c("shallow","deep"),values=c("shallow"="lightblue4","deep"="navy"))+
+facet_wrap(~Species)+
+scale_y_continuous(expand=expansion(mult=c(0.05,0.25)))+
+theme_bw()+
+theme(legend.position="bottom",panel.grid.major=element_line(color="gray90"),panel.grid.minor=element_blank(),strip.background=element_rect(fill="white"),strip.text=element_text(face="bold"),axis.text=element_text(size=5),axis.title=element_text(size=13))+
+labs(x="Temperature [°C]",y="Pigmentation retention [%]",title="Bleaching response across temperatures")
+
+boxplot_pigmentation
+
+#save image
+ggsave('/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/Manuscript_Figures_Final/Suppl_Fig_VBA.pdf', plot = boxplot_pigmentation, width =8, height = 3, dpi = 300, bg = "white")
+
+```
+
+## Figure 2C: CBASS ED50 of *Porites cf. lobata* and *Pocillopora cf. damicornis* from the shallow and deeper depth
+
+```{r}
+# Ensure order: shallow first, then deep
+# eds_combined_filtered and eds_combined
+eds_combined$Condition <- factor(eds_combined$Condition,
+                                     levels = c("shallow", "deep"))
+
+# Use mean EDs for plottingen
+mean_labels <- mean_eds_df_all %>%
+  select(Species, Condition, mean_ED50)
+
+# Convert to long format for plotting vertical lines
+mean_eds_long <- mean_eds_df_all %>%
+  pivot_longer(
+    cols = c(mean_ED5, mean_ED50, mean_ED95),
+    names_to = "ED_level",
+    values_to = "ED"
+  )
+
+# sort coral species
+eds_combined$Species <- factor(
+  eds_combined$Species,
+  levels = c("Porites lobata", "Pocillopora damicornis")
+)
+
+
+# plot
+plot_ED50 <- ggplot(eds_combined,
+                          aes(x = Condition,
+                              y = ED50,
+                              fill = Condition)) +
+  
+  # Boxplot
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  
+  # Raw data points
+  geom_jitter(
+    width = 0.15,
+    size = 2.5,
+    alpha = 0.8,
+    aes(color = Condition)
+  ) +
+  
+  # >>> Add mean ED50 labels <<<
+  geom_text(
+    data = mean_labels,
+    aes(
+      x = Condition,
+      y = mean_ED50 + 2,   # adjust upward so label sits above box
+      label = paste0(" ", round(mean_ED50, 2), "°C"),
+      color = Condition
+    ),
+    size = 3.5,
+    fontface = "bold",
+    show.legend = FALSE
+  ) +
+  
+  # Colors
+  scale_fill_manual(
+    values = c("shallow" = "lightblue", "deep" = "darkblue")
+  ) +
+  scale_color_manual(
+    values = c("shallow" = "lightblue4", "deep" = "navy")
+  ) +
+  
+  # Facet by species
+  facet_wrap(~ Species) +
+  
+  # Y-axis expansion
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.18))) +
+  
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank(),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(face = "bold"),
+    axis.text = element_text(size = 11),
+    axis.title = element_text(size = 13)
+  ) +
+  
+  labs(
+    x = "Reef depth",
+    y = "ED50 [°C]",
+    title = "ED50 differences between reef depths"
+  )
+
+plot_ED50
+# figure was edited in affinity designer
+
+# save as pdf
+ggsave('/pathname/Fig1B_CBASS_ED50.pdf', plot = plot_ED50, width = 7, height = 6, dpi = 300, bg = "white")
+
+```
+
+## Figure 2D: Decline width of *Porites cf. lobata* and *Pocillopora cf. damicornis*
+
+```{r}
+# Calculate mean ED values (2 decimals)
+mean_EDs <- mean_eds_df_all
+
+# Cacluate mean decline width
+decline_width_df <- mean_EDs %>%
+  mutate(
+    decline_width = round(mean_ED95 - mean_ED5, 2)
+  ) %>%
+  select(Species, Condition, decline_width)
+
+
+# Mean labels for plotting
+mean_labels <- decline_width_df
+
+# decline width dots for plotting
+decline_width_df <- eds_combined %>%
+  group_by(Species, Condition) %>%
+  mutate(
+    decline_width  = round(ED95 - ED5, 2)
+  )
+    
+
+# Plot
+plot_declinewidth <- ggplot(decline_width_df,
+                            aes(x = Condition,
+                                y = decline_width,
+                                fill = Condition)) +
+  
+  # Boxplot
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  
+  # Raw data points
+  geom_jitter(
+    width = 0.15,
+    size = 2.5,
+    alpha = 0.8,
+    aes(color = Condition)
+  ) +
+  
+  # Mean labels
+  geom_text(
+    data = mean_labels,
+    aes(
+      x = Condition,
+      y = decline_width + 6,
+      label = paste0(round(decline_width, 2), "°C"),
+      color = Condition
+    ),
+    size = 3.5,
+    fontface = "bold",
+    show.legend = FALSE
+  ) +
+  
+  # Colors
+  scale_fill_manual(
+    values = c("shallow" = "lightblue", "deep" = "darkblue")
+  ) +
+  scale_color_manual(
+    values = c("shallow" = "lightblue4", "deep" = "navy")
+  ) +
+  
+  # Facet by species
+  facet_wrap(~ Species) +
+  
+  # Y-axis expansion
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.18))) +
+  
+  # Theme
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank(),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(face = "bold"),
+    axis.text = element_text(size = 11),
+    axis.title = element_text(size = 13)
+  ) +
+  
+  # Labels
+  labs(
+    x = "Reef depth",
+    y = "Decline Width [°C]",
+    title = "Decline differences between reef depths"
+  )
+
+plot_declinewidth
+
+# save as pdf
+ggsave('/pathname/Fig1C_CBASS_declinewidth.pdf', plot = plot_declinewidth, width = 7, height = 6, dpi = 300, bg = "white")
+
+```
+
+## Figure 3A: Symbiodiniaceae community composition (ITS2)
+
+```{r}
+# used eds_combined withou the eds data as metadata for ITS2 profile plotting
+its2_metadata_ID25 <- eds_combined[, 1:(ncol(eds_combined) - 4)]
+
+# upload ITS2 profile absolute abundance
+its2_profile_ID25 <- read_excel(input_data_path, sheet = "Data S6. ITS2 type profs rel ab")
+
+# remove not needed rows and columns
+colnames(its2_profile_ID25) <- its2_profile_ID25[6, ]
+
+# Remove rows 1–5, 19, and 20
+its2_profile_ID25 <- its2_profile_ID25[-c(1:6, 107, 108), ]
+
+# Remove first column
+its2_profile_ID25 <- its2_profile_ID25[,-1]
+
+# Rename new first column
+colnames(its2_profile_ID25)[1] <- "Sample_name_ITS2"
+
+# remove Porites 1-5 from shallow and deep from the its2 dataset
+its2_profile_ID25 <- its2_profile_ID25 %>%
+  filter(
+    !Sample_name_ITS2 %in% c(
+      "ID_GAd_Por01_deep",
+      "ID_GAd_Por02_deep",
+      "ID_GAd_Por03_deep",
+      "ID_GAd_Por04_deep",
+      "ID_GAd_Por05_deep",
+      "ID_GAd_Por01_shallow",
+      "ID_GAd_Por02_shallow",
+      "ID_GAd_Por03_shallow",
+      "ID_GAd_Por04_shallow",
+      "ID_GAd_Por05_shallow"
+    )
+  )
+
+
+# merge dataframes
+its2_data_ID25 <- merge(its2_metadata_ID25, its2_profile_ID25, by = "Sample_name_ITS2", all.x = TRUE)
+
+# prepare for plotting
+# Convert to long format for ggplot
+its2_profile_ID25_long <- its2_data_ID25 %>%
+  gather(key = "ITS2_profile", value = "value", "A4/A3-A4a-A4.3-A3ac-A4ex-A4ah":"D1/D2d-D4-D17d-D17e-D1r-D17c-D2an-D2bk-D2bj")
+
+# Ensure order
+its2_profile_ID25_long <- its2_profile_ID25_long %>%
+  mutate(
+    Condition = factor(Condition, levels = c("shallow", "deep")))
+
+# check data structure
+str(its2_profile_ID25_long)
+# value is character, convert to numeric
+its2_profile_ID25_long$value <- as.numeric(its2_profile_ID25_long$value)
+
+# adjust its2 type profile names of its2 type profiles
+its2_profile_ID25_long$ITS2_profile <- gsub("\\.", "_", its2_profile_ID25_long$ITS2_profile)
+its2_profile_ID25_long$ITS2_profile <- gsub("\\-", "_", its2_profile_ID25_long$ITS2_profile)
+
+# remove low abundance data
+its2_profile_ID25_long<- its2_profile_ID25_long %>% 
+  dplyr::filter(value > 0.01)
+
+#list all the its2 type profiles
+unique(its2_profile_ID25_long$ITS2_profile)
+# count
+length(unique(its2_profile_ID25_long$ITS2_profile))
+# 48
+
+its2_colors <- c(
+  "A4/A3_A4a_A4_3_A3ac_A4ex_A4ah" = "#F7C9BF",
+  "A4/A3_A4a_A4_3_A3ac_A4ev" = "#E98176",
+  "A4_A3_A4a_A4_3_A3ac_A4e" = "#F4A582",
+  "A4_A3_A4a_A4_3_A1pz_A4ex" = "#D6604D",
+  "A3/A4_A4a_A3ac_A4_3" = "#B2182B",
+  "A4_A3_A4a_A4_3_A4h_A3er" = "#EF8A62",
+  "A4_A3_A4a_A4_3_A4e" = "#CA0020",
+  "A3/A4_A3ac_A4a_A3cj_A3er_A3ae" = "#67000D",
+
+  "B1_B5_B1au_B5eo_B1g_B1by_B1ct" = "#8C510A",
+
+  "C1d/C1/C42_2/C3_C1b_C3cg_C115k_C45c_C1au_C41p" = "#0066CC",
+  "C1d/C1_C42_2_C1b_C3_C1au_C115k_C41p_C45c_C42bg_C1ex" = "#66CCFF",
+  "C1d_C1tf_C1_C42_2_C1b_C3cg_C1ex" = "#003366",
+
+  "C15_C15ad_C15ai_C116aa_C93l_C116" = "#006D2C",
+  "C15_C15ad_C116ab_C15gu_C116" =  '#669966',
+  
+  "C15_C15by_C15bn_C15ai_C15he" = "#66C2A4",
+  "C15_C15by_C15ai" = "#41AE76",
+  
+  "C15_C15bn_C15by" = "#FF9900",
+  "C15_C15bn_C15aw" = "#CC9900",
+  
+  "C15/C15cn" = "#74C476",
+  "C15_C15fh" = '#66CC33',
+  "C15_C15gs_C15ai" = "#99CC33",
+  "C15ed/C15" = "#76912F",
+  "C15_C15ev_C15dt" = "#00CC66",
+  "C15ed" = "#31A354",
+  "C15_C15abe_C15vq_C15ad_C15abd_C15jj_C15tl" = "#A1D76A",
+  "C15_C116aa_C15bn" = "#005824",
+  "C15_C15adx_C15_8" = "#ADDD8E",
+  "C15_C15fh_C15bn" = "#99CC99",
+  "C15_C15_8_C15adx_C15ady" = "#4D9221",
+  "C15_C15l_C15n_C15bb_C15_8" = "#238B45",
+
+  "C91h" = "#999999",
+
+  "C3/C7" = "#00CCFF",
+  
+  "D1_D2d_D1aj_D1if_D1tr" = "#AA5199",
+  "D1_D2d_D10a_D1gx_D1tt" = "#CC66FF",
+  "D2d/D1/D1iw_D4ed" = "#FFAAAA",
+  "D1/D2d_D1aa_D1z_D1y" = "#FF99CC",
+  "D4/D6" = "#C084FC",
+  "D1_D2d_D6_D4_D2_2" = "#A079BF",
+  "D1_D2d_D1aa_D1z_D1ky" = "#7900D7",
+  "D1/D2d" = "#FFCCFF",
+  "D1_D2d_D1aj_D1bf_D1y" = "#CC0099",
+  "D1_D2d_D1if_D1y" = "#9900CC",
+  "D1_D2d_D1y_D1aj_D1if" = "#B100B1",
+  "D1_D4_D17p_D1r_D4c_D17o_D1c_D17ai_D17c" = "#6A0DAD",
+  "D1_D2d_D1z_D1aa_D1od" = "#E704C4",
+  "D1_D2d_D4_D2aj" = "#68228B",
+  "D1_D2d_D1aa_D1y_D1z_D1x_D1ah" = "#FF66FF",
+  "D1_D1aa_D2d_D2e_D1ag_D1ah_D1ti_D1ae_D1y" = "#FFA0F2"
+)
+
+
+# check if every unique its2 profile has a color
+its2_types <- unique(its2_profile_ID25_long$ITS2_profile)
+
+color_keys <- names(its2_colors)
+
+setdiff(its2_types, color_keys)
+
+# count unique its2 type profiles
+length(unique(its2_profile_ID25_long$ITS2_profile))
+# 48
+
+#sort
+its2_profile_ID25_long$Species <- factor(
+  its2_profile_ID25_long$Species,
+  levels = c("Porites cf. lobata", "Pocillopora cf. damicornis"))
+
+# make sure low abundance ots2 type profiles re at the bottom of each bar
+its2_profile_ID25_long <- its2_profile_ID25_long %>%
+  group_by(ITS2_profile) %>%
+  mutate(total_abundance = sum(value, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(
+    ITS2_profile = reorder(ITS2_profile, -total_abundance)
+  )
+
+
+# plot
+its2plot <- ggplot(its2_profile_ID25_long, aes(x = Genotype, y = value, fill = ITS2_profile)) +
+  geom_bar(stat = "identity", position = "fill") +  # relative abundance pro Sample
+  scale_y_continuous(labels = percent_format(), expand = c(0, 0)) +  # 0-100% Skala
+  facet_grid(Condition ~ Species, scales = "free_x") +  # facet by host and depth
+  scale_fill_manual(values = its2_colors) +  # Hier wird unsere farbige Zuordnung genutzt
+  theme_minimal() +
+  labs(
+    x = "Colony", 
+    y = "Relative Abundance [%]", 
+    title = "Relative Abundance of ITS2 Profiles across Depth",
+    fill = "ITS2 Type Profile"
+  ) +
+  theme(
+    axis.text.x = element_text(vjust = 1, hjust = 1),
+    strip.text.y = element_text(angle = 0),
+    panel.grid = element_blank(),
+    panel.border = element_blank(),
+    legend.position = "bottom",                # Legende unter dem Plot
+    legend.key.size = unit(0.5, "cm"),         # kleinere Legende
+    legend.text = element_text(size = 8),      
+    legend.title = element_text(size = 10, hjust = 0.5),  
+    legend.spacing.x = unit(0.2, "cm"),        
+    legend.box.spacing = unit(0.5, "cm")       
+  )
+
+its2plot
+
+# Save as PDF
+ggsave("/pathname/Fig3_ITS2.pdf", plot = its2plot, width = 17, height = 10, units = "in")
+
+
+
+
+# sort by its2 type profiles
+# Create alphabetical order of ITS2 profiles
+profile_order <- sort(unique(its2_profile_ID25_long$ITS2_profile))
+
+# Make ITS2_profile a factor using this order
+its2_profile_ID25_long$ITS2_profile <- factor(
+  its2_profile_ID25_long$ITS2_profile,
+  levels = profile_order
+)
+
+# Order Genotypes according to their ITS2 profile
+genotype_order <- its2_profile_ID25_long %>%
+  group_by(Condition, Species, Genotype) %>%
+  summarise(
+    ITS2_profile = first(ITS2_profile),
+    .groups = "drop"
+  ) %>%
+  arrange(Condition, Species, ITS2_profile, Genotype)
+
+str(genotype_order)
+
+# Create ordered Genotype factor
+its2_profile_ID25_long <- its2_profile_ID25_long %>%
+  left_join(
+    genotype_order %>%
+      mutate(Genotype_order = row_number()) %>%
+      dplyr::select(Condition, Species, Genotype, Genotype_order),
+    by = c("Condition", "Species", "Genotype")
+  )
+
+# sort it
+its2_profile_ID25_long <- its2_profile_ID25_long %>% arrange(Genotype_order)
+
+# make it as factor
+its2_profile_ID25_long$Genotype <- as.factor(its2_profile_ID25_long$Genotype)
+its2_profile_ID25_long$Genotype_order <- as.factor(its2_profile_ID25_long$Genotype_order)
+
+# define level and order
+levels_order <- its2_profile_ID25_long$Genotype_order
+label_order <- setNames(its2_profile_ID25_long$Genotype, its2_profile_ID25_long$Genotype_order)     # id -> label mapping
+
+# make factor
+its2_profile_ID25_long$Genotype <- factor(its2_profile_ID25_long$Genotype, levels = levels)
+
+# specify
+its2_profile_ID25_long <- its2_profile_ID25_long %>% mutate(Genotype_order = factor(Genotype_order, levels = levels_order))
+
+
+# plot
+its2plot <- ggplot(its2_profile_ID25_long, aes(x = Genotype_order, y = value, fill = ITS2_profile)) +
+  geom_bar(stat = "identity", position = "fill") +  # relative abundance pro Sample
+  scale_y_continuous(labels = percent_format(), expand = c(0, 0)) +  # 0-100% Skala
+  scale_x_discrete(labels = label_order)+
+  facet_wrap(Condition ~ Species, scales = "free") +  # facet by host and depth
+  scale_fill_manual(values = its2_colors) +  # Hier wird unsere farbige Zuordnung genutzt
+  theme_minimal() +
+  labs(
+    x = "Colony", 
+    y = "Relative Abundance [%]", 
+    title = "Relative Abundance of ITS2 Profiles across Depth",
+    fill = "ITS2 Type Profile"
+  ) +
+  theme(
+    axis.text.x = element_text(vjust = 1, hjust = 1),
+    strip.text.y = element_text(angle = 0),
+    panel.grid = element_blank(),
+    panel.border = element_blank(),
+    legend.position = "bottom",                # Legende unter dem Plot
+    legend.key.size = unit(0.5, "cm"),         # kleinere Legende
+    legend.text = element_text(size = 8),      
+    legend.title = element_text(size = 10, hjust = 0.5),  
+    legend.spacing.x = unit(0.2, "cm"),        
+    legend.box.spacing = unit(0.5, "cm")       
+  )
+
+its2plot
+
+# Save as PDF
+ggsave("/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/Manuscript_Figures_Final/Fig3_ITS2_sorted.pdf", plot = its2plot, width = 17, height = 10, units = "in")
+
+
+```
+
+# DADA2 Pipeline: Bacterial community composition analysis
+
+```{r}
+# set working directory and upload data
+cat("Reading files") # prints a message to indicate the script is starting to read files
+path <- "." # current working directory
+list.files(path) # lists all files in the current directory 
+
+# Forward and reverse fastq filenames have format: 
+fnFs <- sort(list.files(path, pattern="_R1_001.fastq", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern="_R2_001.fastq", full.names = TRUE))
+# searches for files matching specific patterns _R1_001...and sorts files, get a sorted list of file paths for forward (fnFs) and reverse reads (fnRs)
+
+# Extract sample names, assuming filenames have format
+sample.names <- sapply(strsplit(basename(fnFs), "__|_0"), function(x) x[2])
+
+cat("Processing",length(sample.names),"samples:", sample.names)
+# outputs a summary of the number of samples detected and their names, legth(): counts the number, cat():prints the message
+
+#Inspect read quality profiles
+plotQualityProfile(fnFs[1:2])
+# forwards reads
+# --> Truncate the forward reads at position 280
+
+plotQualityProfile(fnRs[1:2])
+# reversed reads
+# --> Truncate the forward reads at position 220 where the quality crashes
+
+```
+
+## Filtering and Trimming
+
+```{r}
+# filter and trimm 
+cat("Filtering and trimming")
+
+# prints a message to indicate that the filtering and triming steps are about to begin in the sequencing data processing pipeline
+
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+
+### set parameters  maxN=0 (DADA2 requires no Ns), truncQ=2, rm.phix=TRUE and maxEE=2. The maxEE parameter sets the maximum number of “expected errors” allowed in a read, which is a better filter than simply averaging quality scores.
+out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=c(280,220),maxN=0, maxEE=c(2,2), truncQ=5, rm.phix=TRUE, compress=TRUE, multithread=TRUE) 
+
+head(out)
+```
+
+## Learn Error Rate
+
+```{r}
+# learn error rates
+# The error model is learned using the filtered and trimmed sequences, which helps in determining the probability of errors at each base position across the reads.Forward (errF) and reverse (errR) errors are learned separately because the forward and reverse reads often have different error profiles.
+
+cat("Learning error rates")
+errF <- learnErrors(filtFs, multithread=TRUE)
+errR <- learnErrors(filtRs, multithread=TRUE)
+
+# visualize the esstimated error rates as a sanity check
+plotErrors(errF, nominalQ = T)
+```
+
+## Sample interference
+
+```{r}
+# This step is essential for transforming the raw sequencing data into biologically meaningful information by correcting errors and identifying the true sequences present in your samples
+# apply the core sample inference algorithm to the filtered and trimmed sequence data.
+dadaFs <- dada(filtFs, err=errF, multithread=TRUE, pool = T)
+dadaRs <- dada(filtRs, err=errR, multithread=TRUE, pool = T)
+# It uses the error rates learned from the reverse reads (errR) to apply the error-correction model and infer the true biological sequences.
+
+#Inspecting the returned dada-class object:
+dadaFs[[1]]
+dadaRs[[1]]
+```
+
+## Merging paired reads
+
+```{r}
+mergers_ID <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose=TRUE)
+# merges forward (F) and reveres (R) sequences and filtered data in one column
+# Inspect the merger data.frame from the first sample
+head(mergers_ID[[1]])
+
+# We can now construct an amplicon sequence variant table (ASV) table, a higher-resolution version of the OTU table produced by traditional methods.
+
+seqtab_ID <- makeSequenceTable(mergers_ID)
+# creates a sequence table from the merged paired-end reads. A sequence table is a matrix where: rows represent individual samples, columns represent unique DNA sequences, entries contain the counts of each sequence in each sample
+dim(seqtab_ID)
+# returns the dimensions of the sequence table (1st value number of rows (sample), 2nd value is the number of columns (unique sequences))
+
+# Inspect distribution of sequence lengths
+table(nchar(getSequences(seqtab_ID)))
+
+# check visually how the districution of read length is
+# Get the read length distribution
+length_table_ID <- table(nchar(getSequences(seqtab_ID)))
+
+# Convert to data frame for plotting
+length_df_ID <- as.data.frame(length_table_ID)
+colnames(length_df_ID) <- c("Length", "Count")
+
+# Make sure Length is numeric
+length_df_ID$Length <- as.numeric(as.character(length_df_ID$Length))
+
+ggplot(length_df_ID, aes(x = Length, y = Count)) +
+  geom_col(fill = "steelblue") +  # vertical bars
+  labs(title = "Distribution of Read Lengths",
+       x = "Read Length (bp)",
+       y = "Number of Reads") +
+    xlim(280, 400)+
+  theme_minimal()
+```
+
+## Remove Chimerism
+
+```{r}
+# Remove chimeras  
+# Chimeric sequences are artifacts of the PCR amplification process. These sequences do not represent real biological sequences but rather result from errors in the molecular processes used to prepare and sequence DNA.
+# Chimeric sequences can inflate diversity estimates. Removing them ensures that the analysis focuses only on true biological sequences.
+# This code removes chimeric sequences from the sequence table, calculates the dimensions of the updated sequence table and determines the proportion of non-chimeric sequences retained.
+
+seqtab.nochim_ID <- removeBimeraDenovo(seqtab_ID, method="consensus", multithread=TRUE, verbose=TRUE)
+
+dim(seqtab.nochim_ID)
+
+## calculate the  frequency of chimeric sequences 
+sum(seqtab.nochim_ID)/sum(seqtab_ID)
+
+# Track reads through the pipeline 
+# This block of code tracks the number of reads at each stage of the DADA2 pipeline for each sample. This tracking helps monitor data loss, identify problematic samples, and ensure the pipeline is functioning as expected.
+getN <- function(x) sum(getUniques(x))
+
+# custom function that calculates the total number of unique reads (amplicon sequences)
+track_ID <- cbind(out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers_ID, getN), rowSums(seqtab.nochim_ID))
+# combines data from multiple steps into a single table
+# If processing a single sample, remove the sapply calls: e.g. replace sapply(dadaFs, getN) with getN(dadaFs)
+colnames(track_ID) <- c("input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim")
+rownames(track_ID) <- sample.names
+head(track_ID)
+
+# download table
+# before downloading remove the tail of the name
+track_ID_adjusted <- track_ID
+
+rownames(track_ID_adjusted) <- rownames(track_ID_adjusted) |>
+  sub("_[A-Z]\\d+_R[12]$", "", x = _) |>
+  sub("^GAD_", "", x = _)
+
+write.xlsx(track_ID_adjusted, file = "2025_ID_GAd_stats_DADA2_overview_table.xlsx", rowNames = TRUE)
+```
+
+## Assign Taxonomy
+
+```{r}
+# Assign taxonomy
+# This block of code assigns taxonomic classifications to the non-chimeric sequences (ASVs) in your dataset, enabling the identification of the taxa represented by the sequences
+
+taxa_ID <- assignTaxonomy(seqtab.nochim_ID,'/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/16S_files/silva_nr_v138_train_set.fa.gz' , multithread=TRUE)
+# uses a reference database to classify each unique sequence (ASV) in the seqtab.nochim table to a taxonomic level
+# rows: correspond to unique sequences (ASV)
+
+##optional: make species level assignments based on exact matching
+taxa_ID <- addSpecies(taxa_ID, '/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/16S_files/silva_species_assignment_v138.fa.gz')
+                   
+#inspect the taxonomic assignments:
+taxa.print_ID <- taxa_ID # Removing sequence rownames for display only
+rownames(taxa.print_ID) <- NULL
+head(taxa.print_ID)
+```
+
+## Prepare Data for Plotting
+
+```{r}
+# add needed info to data frame
+samples.out_ID <- rownames(seqtab.nochim_ID)
+
+info_split_ID <- strsplit(samples.out_ID, "_")
+
+Country <- sapply(info_split_ID, function(x) x[1])
+Location <- sapply(info_split_ID, function(x) x[2])
+Coral_Species <- sapply(info_split_ID, function(x) x[3])
+
+Condition <- sapply(info_split_ID, function(x) {
+  sub("[0-9]+", "", x[4])
+})
+
+Genotype <- sapply(info_split_ID, function(x) {
+  gsub("[^0-9]", "", x[4])
+})
+
+samdf_ID <- data.frame(
+  Country,
+  Location,
+  Coral_Species,
+  Condition,
+  Genotype,
+  stringsAsFactors = FALSE
+)
+
+rownames(samdf_ID) <- samples.out_ID
+rownames(samdf_ID) <- samples.out_ID
+
+
+# check the amount of sampling locations
+table(samdf_ID$Condition)
+
+samdf_ID_download  <- rename(samdf_ID)
+
+# change row names for download
+rownames(samdf_ID_download) <- rownames(samdf_ID_download) |>
+  sub("_[A-Z]\\d+_R[12]$", "", x = _) |>
+  sub("^GAD_", "", x = _)
+
+
+write.xlsx(samdf_ID_download, file = "2025_ID_GAD_metadata.xlsx", rowNames = TRUE)
+
+
+# add the name of the Location
+samdf_ID <- samdf_ID %>%
+  mutate(
+    Condition = case_when(
+      Condition == "S" ~ "Shallow",
+      Condition == "D" ~ "Deep",
+      TRUE ~ NA_character_   # just in case other values exist
+    )
+  )
+
+# Prepare data - FILTERING - seqtab.nochim
+# turn matrix
+seqtab.nochim_ID_t <- t(seqtab.nochim_ID)
+
+# Filter: Keep only rows with sum > 10
+row_sums <- rowSums(seqtab.nochim_ID_t)
+
+seqtab.nochim_ID_filtered_t <- 
+  seqtab.nochim_ID_t[row_sums > 10, ]
+
+# before filtering
+nrow(seqtab.nochim_ID_t)
+# 7100
+
+# after filtering
+nrow(seqtab.nochim_ID_filtered_t)
+# 5597
+
+# turn matrix back so it was as before
+seqtab.nochim_ID_filtered_t <- t(seqtab.nochim_ID_filtered_t)
+# filtered seqtab table
+
+# FILTER: taxa table
+# filter taxa table based on the rows from the seqtab.nochim table
+filtered_asvs <- rownames(seqtab.nochim_ID_filtered_t)
+
+# subset the taxonomy table to keep only these ASVs
+taxa_ID_filtered <- taxa_ID[filtered_asvs, ]
+
+# filter contaminations every kingdom that is not eukaryotes
+# first check how many rows are not bacteria
+taxa_df <- as.data.frame(taxa_ID_filtered)
+
+# now filter
+# Keep only rows where Kingdom is "Bacteria" AND Family is not NA
+taxa_ID_filtered_onlybac <- taxa_df[ !is.na(taxa_df$Kingdom) &  taxa_df$Kingdom == "Bacteria", ]
+
+# after filtering
+nrow(taxa_ID_filtered_onlybac)
+# 4546
+
+# now remove any bacterial Family identified as Mitochondria, if present
+taxa_ID_filtered_onlybac <- taxa_ID_filtered_onlybac[ !is.na(taxa_ID_filtered_onlybac$Family) &  taxa_ID_filtered_onlybac$Family != "Mitochondria", ]
+
+# after filtering
+nrow(taxa_ID_filtered_onlybac)
+# 3706
+
+# make the data frame back into a matrix
+# Convert to matrix
+taxa_ID_filtered_onlybac <- as.matrix(taxa_ID_filtered_onlybac)
+
+# now remove the rows that were removed from the taxa table also from the asv table before constructing physeq dataframe
+# what rows should be kept
+keep_ASVs <- rownames(taxa_ID_filtered_onlybac)
+
+seqtab.nochim_ID_filtered_onlybac_t <- t(seqtab.nochim_ID_filtered_onlybac)
+
+# remove filtered rows
+seqtab.nochim_ID_filtered_onlybac_t <- seqtab.nochim_ID_filtered_onlybac_t[keep_ASVs, , drop = FALSE]
+
+# after filtering
+nrow(seqtab.nochim_ID_filtered_onlybac_t)
+# 3706
+
+# turn matrix
+seqtab.nochim_ID_filtered_onlybac <- t(seqtab.nochim_ID_filtered_onlybac_t)
+
+# CONSTRUCT PHYLSEQ
+# construct a phyloseq object. with filtered seqtab.nochim and taxa data and ASV names
+ps_ID_filtered <- phyloseq(otu_table(seqtab.nochim_ID_filtered_onlybac_t, taxa_are_rows=TRUE), 
+               sample_data(samdf_ID), 
+               tax_table(taxa_ID_filtered_onlybac))
+
+# store DNA sequences of our ASV in the refseq slot of the phyloseq object
+dna_ID <- Biostrings::DNAStringSet(taxa_names(ps_ID_filtered))
+names(dna_ID) <- taxa_names(ps_ID_filtered)
+ps_ID_filtered <- merge_phyloseq(ps_ID_filtered, dna_ID)
+taxa_names(ps_ID_filtered) <- paste0("ASV", seq(ntaxa(ps_ID_filtered)))
+ps_ID_filtered
+
+# save the whole phyloseq object
+saveRDS(
+  ps_ID_filtered,
+  file = "/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/16S_files/ps_ID_filtered.rds"
+)
+
+# upload phyloseq
+ps_ID_filtered <- readRDS('/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/16S_files/ps_ID_filtered.rds')
+
+# FOR DOWNLOADING
+# asv table
+asv_df_ID <- as.data.frame(otu_table(ps_ID_filtered))
+
+# turn matrix
+asv_df_ID <- t(asv_df_ID)
+
+# remove not needed sample name tail
+asv_df_ID_download <- asv_df_ID
+
+colnames(asv_df_ID_download) <- colnames(asv_df_ID_download) |>
+  sub("_[A-Z]\\d+_R[12]$", "", x = _) |>
+  sub("^GAD_", "", x = _)
+
+
+# download taxa table with DNA sequences and with ASV names
+write.xlsx(asv_df_ID_download, file = "/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/16S_files/2025_ID_GAd_asv_table_filtered_onlybac.xlsx", rowNames = TRUE)
+
+
+# extract taxa table with ASV
+taxa_df_ID <- as.data.frame(tax_table(ps_ID_filtered))
+
+# download taxa table with DNA sequences and with ASV names
+write.xlsx(taxa_df_ID, file = "/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/16S_files/2025_ID_GAd_taxa_table_asv_filtered_onlybac.xlsx", rowNames = TRUE)
+
+
+# DNA seq table
+# use: seqtab.nochim_t_filtered
+# rename sample name: only the important info
+seqtab.nochim_ID_filtered_onlybac_t_download <- seqtab.nochim_ID_filtered_onlybac_t
+
+colnames(seqtab.nochim_ID_filtered_onlybac_t_download) <- colnames(seqtab.nochim_ID_filtered_onlybac_t_download) |>
+  sub("_[A-Z]\\d+_R[12]$", "", x = _) |>
+  sub("^GAD_", "", x = _)
+
+# download ASV table with DNA sequences (filtered: >10 count removed and the sampling locations in colony 2)
+write.xlsx(seqtab.nochim_ID_filtered_onlybac_t_download, file = "/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/16S_files/2025_ID_GAd_DNA_seq_filtered_onlybac_table.xlsx", rowNames = TRUE)
+
+# create fasta file
+# extract DNA sequences from phyloseq object
+asv_seqs_ID <- refseq(ps_ID_filtered)
+
+# check number of sequences
+length(asv_seqs_ID)   # should be 4546
+
+# write to FASTA file
+Biostrings::writeXStringSet(asv_seqs_ID, "/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/16S_files/2025_ID_GAd_ASV_DNAseq_filtered_onlybac.fasta")
+```
+
+## Figure 3B: Bacterial community composition (16S)
+
+```{r}
+# run DADA2 pipline with raw data or upload files
+# Upload ASV sequence table:2025_ID_GAd_DNA_seq_filtered_onlybac_table
+seqtab.nochim_ID_filtered_onlybac_t <- read_excel(file.choose())
+
+# Convert tibble to dataframe
+seqtab.nochim_ID_filtered_onlybac_t <- as.data.frame(seqtab.nochim_ID_filtered_onlybac_t)
+
+# Set first column as row names
+rownames(seqtab.nochim_ID_filtered_onlybac_t) <- seqtab.nochim_ID_filtered_onlybac_t[, 1]
+
+# Remove first column
+seqtab.nochim_ID_filtered_onlybac_t <- seqtab.nochim_ID_filtered_onlybac_t[, -1, drop = FALSE]
+
+# Upload metadata: 2025_ID_GAd_metadata
+samdf_ID <- read_excel(
+  file.choose())
+
+# Convert tibble to dataframe
+samdf_ID <- as.data.frame(samdf_ID)
+
+# Set first column as row names
+rownames(samdf_ID) <- samdf_ID[, 1]
+
+# Remove first column
+samdf_ID <- samdf_ID[, -1, drop = FALSE]
+
+
+# Upload taxonomy table: 2025_ID_GAd_taxa_table_asv_filtered_onlybac
+tax_table <- read_excel(file.choose())
+
+# Convert tibble to dataframe
+tax_table <- as.data.frame(tax_table)
+
+# Set first column as row names
+rownames(tax_table) <- tax_table[, 1]
+
+# Remove first column
+tax_table <- tax_table[, -1]
+
+
+# make tax table to matrix
+tax_table <- as.matrix(tax_table)
+
+# CONSTRUCT PHYLSEQ
+# construct a phyloseq object. with filtered seqtab.nochim and taxa data and ASV names
+ps_ID_filtered <- phyloseq(otu_table(seqtab.nochim_ID_filtered_onlybac_t, taxa_are_rows=TRUE), 
+               sample_data(samdf_ID), 
+               tax_table(tax_table))
+
+# prepare data for plotting
+# Groups ASVs by Family level, Counts are summed up for each Family
+ps_ID_family <- tax_glom(ps_ID_filtered, taxrank = "Family")
+
+# convert counts to relative abundance (%)
+ps_ID_family_rel <- transform_sample_counts(
+  ps_ID_family,
+  function(x) x / sum(x) * 100
+)
+
+# calculate mean abundance per family separately for each coral species
+family_abundance_stats_ID <- psmelt(ps_ID_family_rel) %>%
+  group_by(Coral_Species, Family) %>%
+  summarise(
+    Mean_Abundance = round(mean(Abundance, na.rm = TRUE), 3),
+    SD = round(sd(Abundance, na.rm = TRUE), 3),
+    .groups = "drop"
+  ) %>%
+  arrange(Coral_Species, desc(Mean_Abundance))
+
+# view the most abundant families for each species
+family_abundance_stats_ID
+
+# prepare for download
+family_abundance_stats_ID <- family_abundance_stats_ID %>%
+  arrange(Coral_Species, desc(Mean_Abundance))
+
+# download table
+write.xlsx(family_abundance_stats_ID,
+           file = "/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/16S_files/2025_ID_GAd_family_mean_abundance.xlsx", 
+           rowNames = FALSE)
+
+# calculate mean abundance per Condition separately for each coral species
+family_depth_abundance_stats_ID <- psmelt(ps_ID_family_rel) %>%
+  group_by(Condition, Coral_Species, Family) %>%
+  summarise(
+    Mean_Abundance = round(mean(Abundance, na.rm = TRUE), 3),
+    SD = round(sd(Abundance, na.rm = TRUE), 3),
+    .groups = "drop"
+  ) %>%
+  arrange(Condition, Coral_Species, desc(Mean_Abundance))
+
+# view the most abundant families for each species
+family_depth_abundance_stats_ID
+
+# prepare for download
+family_depth_abundance_stats_ID <- family_depth_abundance_stats_ID %>%
+  arrange(Condition, Coral_Species, desc(Mean_Abundance))
+
+# download table
+write.xlsx(family_depth_abundance_stats_ID,
+           file = "/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/16S_files/2025_ID_GAd_Dephtlocation_family_mean_abundance.xlsx", 
+           rowNames = FALSE)
+
+# make dataframe
+df_ps_ID_family <- psmelt(ps_ID_family)
+
+# clean sample column name
+df_ps_ID_family$Sample <- df_ps_ID_family$Sample |>
+  sub("_[A-Z]\\d+_R[12]$", "", x = _) |>
+  sub("^GAD_", "", x = _)
+
+# rename families that are NA as unknown
+df_ps_ID_family <- df_ps_ID_family %>%
+  mutate(Family = ifelse(is.na(Family), "Unknown", Family))
+
+# 3. Normalize abundance to relative abundance per sample
+df_ps_ID_family <- df_ps_ID_family %>%
+  group_by(Sample) %>%
+  mutate(RelAbundance = Abundance / sum(Abundance)) %>%
+  ungroup()
+
+# download taxa table with DNA sequences and with ASV names
+write.xlsx(df_ps_ID_family, file = "/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/16S_files/2025_ID_GAd_df_ps_ID_family.xlsx", rowNames = TRUE)
+
+# total number of reads
+sum(df_ps_ID_family$Abundance)
+# 3339432
+
+# how many unique Families do we have?
+num_unique_families <- length(unique(df_ps_ID_family$Family))
+num_unique_families
+# 203 unique families
+
+# top 20
+top20_families <- df_ps_ID_family %>%
+  group_by(Family) %>%
+  summarise(TotalRelAbundance = sum(RelAbundance), .groups = "drop") %>%
+  arrange(desc(TotalRelAbundance)) %>%
+  slice_head(n = 20) %>%
+  pull(Family)
+
+# Group all non-top 20 families as "Other"
+df_ps_ID_top20_family <- df_ps_ID_family %>%
+  mutate(Family = ifelse(Family %in% top20_families, as.character(Family), "Other"))
+
+# check number of top 20 families
+df_ps_ID_top20_family %>% distinct(Family) %>% count()
+# 21 (including others)
+
+unique(df_ps_ID_top20_family$Family)
+
+# PLOT
+# organize Genotype with increasing depth
+df_ps_ID_top20_family <- df_ps_ID_top20_family %>%  mutate(
+    Genotype = factor(Genotype, levels = sort(unique(as.numeric(Genotype)))))
+  
+  
+# Location
+df_ps_ID_top20_family <- df_ps_ID_top20_family %>%
+  mutate(
+    Condition = factor(Condition, levels = c("Shallow", "Deep")))
+
+# when plotting ID and MY together use these colors
+# for ID and MY plotted together
+# combine ID and MYS
+families <- c(
+  "Alteromonadaceae",
+  "Endozoicomonadaceae",
+  "Halomonadaceae",
+  "Vibrionaceae",
+  "Idiomarinaceae",
+  "Marinobacteraceae",
+  "Pseudoalteromonadaceae",
+  "Chlorobiaceae",
+  "Flavobacteriaceae",
+  "Rhodobacteraceae",
+  "Crocinitomicaceae",
+  "Colwelliaceae",
+  "Saccharospirillaceae",
+  "Other",
+  "Cyclobacteriaceae",
+  "Simkaniaceae",
+  "Saprospiraceae",
+  "Sphingomonadaceae",
+  "Thalassospiraceae",
+  "Nitrincolaceae",
+  "Hyphomonadaceae"
+)
+
+
+colors_families <- c(
+  "Alteromonadaceae" = "#803E75",
+  "Endozoicomonadaceae" = "#53377A",
+  "Halomonadaceae" = "#00538A",
+  "Vibrionaceae" = "#FF6699",
+  "Idiomarinaceae" = "#FFB300",
+  "Marinobacteraceae" = "#990000",
+  "Pseudoalteromonadaceae" = "#FFCCFF",
+  "Chlorobiaceae" = "#FF6800",
+  "Flavobacteriaceae" = "#93AA00",
+  "Rhodobacteraceae" = "#A6BDD7",
+  "Crocinitomicaceae" = "#9999FF",
+  "Colwelliaceae" = "#006666",
+  "Saccharospirillaceae" = "#996633", 
+  "Other" = "#666666",
+  "Cyclobacteriaceae" = "#66CC66",
+  "Simkaniaceae" = "#333333",
+  "Saprospiraceae" = "#99CC99",
+  "Sphingomonadaceae" = "#0033FF",
+  "Thalassospiraceae" = "#3399CC",   
+  "Nitrincolaceae" = "#9999FF",
+  "Hyphomonadaceae" = "#CC99FF"
+)
+
+
+# map colors to families
+family_colors_combined <- setNames(colors_families, families)
+
+# add color for "Other"
+family_colors_combined["Other"] <- "grey70"
+
+# sort families alphabetically but keep Other first
+family_colors_sorted_combined <- c("Other", sort(setdiff(names(family_colors_combined), "Other")))
+
+# reorder color vector
+family_colors_combined <- family_colors_combined[family_colors_sorted_combined]
+
+# set Family as factor with Other first
+df_ps_ID_top20_family$Family <- factor(
+  df_ps_ID_top20_family$Family,
+  levels = names(family_colors_combined)
+)
+
+# ensure correct ordering of Genotypes (1–25)
+df_ps_ID_top20_family <- df_ps_ID_top20_family %>%
+  mutate(
+    Genotype = factor(Genotype, levels = as.character(sort(unique(as.numeric(Genotype)))))
+  )
+
+df_ps_ID_top20_family <- df_ps_ID_top20_family %>%
+  mutate(
+    Coral_Species = factor(Coral_Species, levels = c("Por", "Poc")),
+    Genotype = factor(Genotype, levels = as.character(sort(unique(as.numeric(Genotype)))))
+  )
+
+# change for plotting
+df_ps_ID_top20_family <- df_ps_ID_top20_family %>%
+  group_by(Sample) %>%
+  mutate(
+    RelAbundance = RelAbundance / sum(RelAbundance) * 100
+  ) %>%
+  ungroup()
+
+
+# plot
+bacteria_family_plot_ID <- ggplot(
+  df_ps_ID_top20_family,
+  aes(x = Genotype, y = RelAbundance, fill = Family)
+) +
+  
+  geom_bar(stat = "identity", position = "stack") +
+  
+  # split by coral species
+  facet_wrap(Condition ~ Coral_Species) +
+  
+  # correct color mapping
+  scale_fill_manual(values = family_colors_combined) +
+  
+  theme_minimal(base_size = 13) +
+  theme(
+    strip.text = element_text(face = "bold", size = 13),
+    legend.position = "bottom",
+    legend.text = element_text(size = 13),
+    legend.title = element_text(size = 13),
+    axis.text = element_text(size = 13),
+    axis.title = element_text(size = 13),
+    panel.grid = element_blank()
+  ) +
+  
+  guides(fill = guide_legend(ncol = 3)) +
+  
+  labs(
+    x = "Genotype",
+    y = "Relative Abundance (%)",
+    fill = "Bacterial Family"
+  )
+
+bacteria_family_plot_ID
+
+# save as pdf
+ggsave('/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Manuscript/Manuscript_Final_Figures/Fig3B_16S.pdf', plot = bacteria_family_plot_ID, width = 8, height = 9, dpi = 300, bg = "white")
+
+ # sort Bacteria based on order of ITS2 genotypes
+
+# adjsut columns and row names so it fits to the genotype list
+df_ps_ID_top20_family_new <- df_ps_ID_top20_family %>%
+  mutate(
+    Coral_Species = dplyr::recode(
+      Coral_Species,
+      "Por" = "Porites cf. lobata",
+      "Poc" = "Pocillopora cf. damicornis"
+    ),
+    Condition = dplyr::recode(
+      Condition,
+      "Deep" = "deep",
+      "Shallow" = "shallow"
+    )
+  )
+
+
+# Get the genotype order from the ITS2 dataset
+genotype_order_df <- its2_profile_ID25_long %>%
+  distinct(
+    Condition,
+    Species,
+    Genotype,
+    Genotype_order
+  ) %>%
+  rename(
+    Coral_Species = Species
+  )
+
+df_ps_ID_top20_family_new <- df_ps_ID_top20_family_new %>%
+  left_join(
+    genotype_order_df,
+    by = c(
+      "Condition",
+      "Coral_Species",
+      "Genotype"
+    )
+  )
+
+
+df_ps_ID_top20_family_new <- df_ps_ID_top20_family_new %>%
+  mutate(
+    Genotype_order = factor(
+      Genotype_order,
+      levels = genotype_order_df$Genotype_order
+    )
+  )
+
+
+# Create labels using the ITS2 genotype order
+genotype_labels <- setNames(
+  genotype_order_df$Genotype,
+  genotype_order_df$Genotype_order
+)
+
+
+df_bacteria_plot <- df_ps_ID_top20_family_new %>%
+  group_by(
+    Condition,
+    Coral_Species,
+    Genotype,
+    Genotype_order,
+    Family
+  ) %>%
+  summarise(
+    RelAbundance = sum(RelAbundance, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# sort by condition
+df_bacteria_plot <- df_bacteria_plot %>%
+  mutate(
+    Condition = factor(
+      Condition,
+      levels = c("shallow", "deep")
+    )
+  )
+
+
+
+# plot
+bacteria_family_plot_ID <- ggplot(
+  df_bacteria_plot,
+  aes(
+    x = Genotype_order,
+    y = RelAbundance,
+    fill = Family
+  )
+) +
+  geom_bar(
+    stat = "identity" , position = "fill",
+    width = 0.9
+  ) +
+  
+  facet_wrap(
+    Condition ~ Coral_Species,
+    scales = "free_x"
+  ) +
+  
+  scale_x_discrete(
+    labels = genotype_labels
+  ) +
+  
+  scale_fill_manual(
+    values = family_colors_combined
+  ) +
+  
+  theme_minimal(base_size = 13) +
+  
+  theme(
+    strip.text = element_text(face = "bold", size = 13),
+    legend.position = "bottom",
+    legend.text = element_text(size = 13),
+    legend.title = element_text(size = 13),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    axis.text.y = element_text(size = 13),
+    axis.title = element_text(size = 13),
+    panel.grid = element_blank()
+  ) +
+  
+  guides(
+    fill = guide_legend(ncol = 3)
+  ) +
+  
+  labs(
+    x = "Genotype",
+    y = "Relative Abundance (%)",
+    fill = "Bacterial Family"
+  )
+
+bacteria_family_plot_ID
+
+# save as pdf
+ggsave('/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/Manuscript_Figures_Final/Fig3B_16S_sorted.pdf', plot = bacteria_family_plot_ID, width = 8, height = 9, dpi = 300, bg = "white")
+```
+
+# **ANCOM-BC2 Analysis**
+
+## ANCOM-BC2: Porites cf. lobata vs. Pocillopora cf. damicronis in the shallow depth
+
+```{r}
+# ANCOM try
+# Make sure predictors are factors
+sample_data(ps_ID_filtered)$Coral_Species <- factor(
+  sample_data(ps_ID_filtered)$Coral_Species
+)
+
+sample_data(ps_ID_filtered)$Condition <- factor(
+  sample_data(ps_ID_filtered)$Condition,
+  levels = c("Shallow", "Deep")
+)
+
+# Check levels present in the phyloseq object
+table(sample_data(ps_ID_filtered)$Coral_Species)
+table(sample_data(ps_ID_filtered)$Condition)
+
+# Check the combination of both
+table(
+  sample_data(ps_ID_filtered)$Coral_Species,
+  sample_data(ps_ID_filtered)$Condition
+)
+
+
+
+# ANCOM-BC2
+ancombc2_ID_shallow <- ancombc2(
+  data = ps_ID_filtered,
+  fix_formula = "Coral_Species * Condition", # the fixed factor we are interested in
+  p_adj_method = "BH", # method to adjust p-value for multiple testing, by controlling FDR, Benjamini-Hochberg: common method for ASV data not too conservative and balances false positives and false ne.
+  pseudo_sens = TRUE, # checks if significant taxa are sensitive to pseudo counts (diff_robust:..)
+  prv_cut = 0.10, # removed very rare ASV present
+  lib_cut = 100, # removes samples with low read number
+  s0_perc = 0.05,  # stabilizes the test statistics by adding a small constant, default
+  alpha = 0.05, # standard significance threshold
+  group = NULL, # NULL because only 2 groups
+  struc_zero = FALSE, # small sample size so start with False
+  neg_lb = FALSE, # controls that a conservative lower bound-based approach, only used when struc_zero = T, rather for larger sample size
+  pairwise = FALSE, # pairwise comparison, not used because only two groups
+  global = FALSE, # only two groups
+  tax_level = NULL, # ASV level wanted
+  em_control = list(tol = 1e-05, max_iter = 100), # default: algorithm calcultation rounds and threshold
+  verbose = TRUE # shows what is happening while the alogrith is running
+)
+
+
+
+
+# ANCOM-BC2
+set.seed(124)
+
+# ANCOMBC2
+# first seperate phyloseq based on Coral_Species
+ps_df_filtered_shallow <- subset_samples(ps_ID_filtered, Condition == "Shallow")
+
+# check if it worked
+table(sample_data(ps_df_filtered_shallow)$Condition)
+
+# set reference level, to make sure Shallow is compared to Deep
+sample_data(ps_df_filtered_shallow)$Coral_Species <- factor(
+  sample_data(ps_df_filtered_shallow)$Coral_Species,
+  levels = c("Por", "Poc")
+)
+
+# ANCOM-BC2
+ancombc2_ID_shallow <- ancombc2(
+  data = ps_df_filtered_shallow,
+  fix_formula = "Coral_Species", # the fixed factor we are interested in
+  p_adj_method = "BH", # method to adjust p-value for multiple testing, by controlling FDR, Benjamini-Hochberg: common method for ASV data not too conservative and balances false positives and false ne.
+  pseudo_sens = TRUE, # checks if significant taxa are sensitive to pseudo counts (diff_robust:..)
+  prv_cut = 0.10, # removed very rare ASV present
+  lib_cut = 100, # removes samples with low read number
+  s0_perc = 0.05,  # stabilizes the test statistics by adding a small constant, default
+  alpha = 0.05, # standard significance threshold
+  group = NULL, # NULL because only 2 groups
+  struc_zero = FALSE, # small sample size so start with False
+  neg_lb = FALSE, # controls that a conservative lower bound-based approach, only used when struc_zero = T, rather for larger sample size
+  pairwise = FALSE, # pairwise comparison, not used because only two groups
+  global = FALSE, # only two groups
+  tax_level = NULL, # ASV level wanted
+  em_control = list(tol = 1e-05, max_iter = 100), # default: algorithm calcultation rounds and threshold
+  verbose = TRUE # shows what is happening while the alogrith is running
+)
+
+
+# ancom results
+res_primary_ID_shallow = ancombc2_ID_shallow$res
+
+# how many ASVs were tested in total
+nrow(res_primary_ID_shallow) 
+# 2655
+
+# count how many are NA
+sum(is.na(res_primary_ID_shallow$"lfc_(Intercept)"))
+# 227
+
+# find significant ASVS across Location
+# counts ASVs that are significant in at least one comparison
+sig_asvs_ID_shallow <- res_primary_ID_shallow[res_primary_ID_shallow$diff_Coral_SpeciesPor == TRUE, ]
+
+# how many remain
+nrow(sig_asvs_ID_shallow)
+# 939
+
+# counts ASVs that are significant in at least one comparison
+sig_asvs_ID_shallow <- sig_asvs_ID_shallow[sig_asvs_ID_shallow$passed_ss_Coral_SpeciesPor == TRUE, ]
+
+nrow(sig_asvs_ID_shallow)
+# 155 sig ASV passed the ANCOM-BC2 sensitivity analysis = result is robust
+
+# download sig ASV ANCOM-BC2 table
+write.xlsx(sig_asvs_ID_shallow, file = "/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/ANCOM/2025_ID_GAd_sig_asv_ANCOMBC2_PorvsPoc_shallow.xlsx", rowNames = TRUE)
+
+
+# extract taxonomy from phyloseq
+tax_ID <- tax_table(ps_ID_filtered)
+tax_ID_df <- as.data.frame(tax_ID)
+tax_ID_df$taxon <- rownames(tax_ID_df)
+
+# join taxonomy
+sig_asvs_tax_ID_shallow <- sig_asvs_ID_shallow %>%
+  left_join(
+    tax_ID_df %>% select(taxon, Phylum, Order, Family, Genus, Species),
+    by = "taxon"
+  )
+
+# replace missing Family names
+sig_asvs_tax_ID_shallow <- sig_asvs_tax_ID_shallow %>%
+  mutate(Family = ifelse(is.na(Family), "Unknown", Family))
+
+# create combined ASV-family label
+sig_asvs_tax_ID_shallow <- sig_asvs_tax_ID_shallow %>%
+  mutate(ASV_Family = paste(taxon, Family, sep = "_"))
+
+# keep only the log fold change column for Top vs Bottom
+heatmap_df_ID_shallow <- sig_asvs_tax_ID_shallow %>%
+  dplyr::select(ASV_Family, lfc_Coral_SpeciesPoc) %>%
+  dplyr::rename(LFC = lfc_Coral_SpeciesPoc) %>%
+  dplyr::mutate(Comparison = "Por_vs_Poc")
+
+# order rows by log fold change
+asv_order_ID_shallow <- heatmap_df_ID_shallow %>%
+  arrange(LFC) %>%
+  pull(ASV_Family)
+
+heatmap_df_ID_shallow$ASV_Family <- factor(heatmap_df_ID_shallow$ASV_Family, levels = asv_order_ID_shallow)
+
+# heatmap
+ANCOMBC2_ID_heatmap <- ggplot(heatmap_df_ID_shallow, aes(x = Comparison, y = ASV_Family, fill = LFC)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(LFC, 2)), size = 3, color = "black") +
+  scale_fill_gradient2(
+    low = "blue",
+    mid = "white",
+    high = "red",
+    midpoint = 0,
+    na.value = "grey90"
+  ) +
+  
+  labs(
+    x = "Comparison",
+    y = "ASV_Family",
+  fill = "Log fold change"
+  ) +
+  
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 0, hjust = 0.5), 
+    panel.grid = element_blank()
+  )
+
+ANCOMBC2_ID_heatmap
+
+
+# Barplot
+# get symmetric limits
+x_max <- max(abs(sig_asvs_tax_ID_shallow$lfc_Coral_SpeciesPoc), na.rm = TRUE)
+
+# plot
+ACOMBC2_ID_bar <- ggplot(sig_asvs_tax_ID_shallow,
+       aes(x = lfc_Coral_SpeciesPoc,
+           y = reorder(ASV_Family, lfc_Coral_SpeciesPoc))) +
+  
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_errorbarh(aes(
+    xmin = lfc_Coral_SpeciesPoc - se_Coral_SpeciesPoc,
+    xmax = lfc_Coral_SpeciesPoc + se_Coral_SpeciesPoc
+  ),
+  height = 0.2) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  coord_cartesian(xlim = c(-x_max, x_max)) +
+  annotate("text", y = Inf, x = x_max, label = "Por",
+           hjust = 1.1, vjust = 1.5, size = 4, fontface = "bold") +
+  annotate("text", y = Inf, x = -x_max, label = "Poc",
+           hjust = -0.1, vjust = 1.5, size = 4, fontface = "bold") +
+  labs(
+    x = "Log fold change (Por vs Poc in a shallow depth)",
+    y = "ASV_Family"
+  ) +
+  theme_minimal()
+
+ACOMBC2_ID_bar
+```
+
+## ANCOM-BC: Porites cf. lobata vs. Pocillopora cf. damicronis in the deeper depth
+
+```{r}
+# ANCOM-BC2
+set.seed(124)
+
+# ANCOMBC2
+# first seperate phyloseq based on Coral_Species
+ps_df_filtered_deep <- subset_samples(ps_ID_filtered, Condition == "Deep")
+
+# check if it worked
+table(sample_data(ps_df_filtered_deep)$Condition)
+
+# set reference level, to make sure Shallow is compared to Deep
+sample_data(ps_df_filtered_deep)$Coral_Species <- factor(
+  sample_data(ps_df_filtered_deep)$Coral_Species,
+  levels = c("Por", "Poc")
+)
+
+# ANCOM-BC2
+ancombc2_ID_deep <- ancombc2(
+  data = ps_df_filtered_deep,
+  fix_formula = "Coral_Species", # the fixed factor we are interested in
+  p_adj_method = "BH", # method to adjust p-value for multiple testing, by controlling FDR, Benjamini-Hochberg: common method for ASV data not too conservative and balances false positives and false ne.
+  pseudo_sens = TRUE, # checks if significant taxa are sensitive to pseudo counts (diff_robust:..)
+  prv_cut = 0.10, # removed very rare ASV present
+  lib_cut = 100, # removes samples with low read number
+  s0_perc = 0.05,  # stabilizes the test statistics by adding a small constant, default
+  alpha = 0.05, # standard significance threshold
+  group = NULL, # NULL because only 2 groups
+  struc_zero = FALSE, # small sample size so start with False
+  neg_lb = FALSE, # controls that a conservative lower bound-based approach, only used when struc_zero = T, rather for larger sample size
+  pairwise = FALSE, # pairwise comparison, not used because only two groups
+  global = FALSE, # only two groups
+  tax_level = NULL, # ASV level wanted
+  em_control = list(tol = 1e-05, max_iter = 100), # default: algorithm calcultation rounds and threshold
+  verbose = TRUE # shows what is happening while the alogrith is running
+) 
+
+
+# ancom results
+res_primary_ID_deep = ancombc2_ID_deep$res
+
+# how many ASVs were tested in total
+nrow(res_primary_ID_deep) 
+# 2325
+
+# count how many are NA
+sum(is.na(res_primary_ID_deep$"lfc_(Intercept)"))
+# 238
+
+# find significant ASVS across Location
+# counts ASVs that are significant in at least one comparison
+sig_asvs_ID_deep <- res_primary_ID_deep[res_primary_ID_deep$diff_Coral_SpeciesPoc == TRUE, ]
+
+# how many remain
+nrow(sig_asvs_ID_deep)
+# 892
+
+# counts ASVs that are significant in at least one comparison
+sig_asvs_ID_deep <- sig_asvs_ID_deep[sig_asvs_ID_deep$passed_ss_Coral_SpeciesPoc == TRUE, ]
+
+nrow(sig_asvs_ID_deep)
+# 176 sig ASV passed the ANCOM-BC2 sensitivity analysis = result is robust
+
+# download sig ASV ANCOM-BC2 table
+write.xlsx(sig_asvs_ID_deep, file = "/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/ANCOM/2025_ID_GAd_sig_asv_ANCOMBC2_PorvsPoc_deep.xlsx", rowNames = TRUE)
+
+
+# extract taxonomy from phyloseq
+tax_ID <- tax_table(ps_ID_filtered)
+tax_ID_df <- as.data.frame(tax_ID)
+tax_ID_df$taxon <- rownames(tax_ID_df)
+
+# join taxonomy
+sig_asvs_tax_ID_deep <- sig_asvs_ID_deep %>%
+  left_join(
+    tax_ID_df %>% select(taxon, Phylum, Order, Family, Genus, Species),
+    by = "taxon"
+  )
+
+# replace missing Family names
+sig_asvs_tax_ID_deep <- sig_asvs_tax_ID_deep %>%
+  mutate(Family = ifelse(is.na(Family), "Unknown", Family))
+
+# create combined ASV-family label
+sig_asvs_tax_ID_deep <- sig_asvs_tax_ID_deep %>%
+  mutate(ASV_Family = paste(taxon, Family, sep = "_"))
+
+
+# keep only the log fold change column for Top vs Bottom
+heatmap_df_ID_deep <- sig_asvs_tax_ID_deep %>%
+  dplyr::select(ASV_Family, lfc_Coral_SpeciesPoc) %>%
+  dplyr::rename(LFC = lfc_Coral_SpeciesPoc) %>%
+  dplyr::mutate(Comparison = "Shallow_vs_Deep")
+
+# order rows by log fold change
+asv_order_ID_deep <- heatmap_df_ID_deep %>%
+  arrange(LFC) %>%
+  pull(ASV_Family)
+
+heatmap_df_ID_deep$ASV_Family <- factor(heatmap_df_ID_deep$ASV_Family, levels = asv_order_ID_deep)
+
+# heatmap
+ANCOMBC2_ID_heatmap <- ggplot(heatmap_df_ID_deep, aes(x = Comparison, y = ASV_Family, fill = LFC)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(LFC, 2)), size = 3, color = "black") +
+  scale_fill_gradient2(
+    low = "blue",
+    mid = "white",
+    high = "red",
+    midpoint = 0,
+    na.value = "grey90"
+  ) +
+  
+  labs(
+    x = "Comparison",
+    y = "ASV_Family",
+  fill = "Log fold change"
+  ) +
+  
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 0, hjust = 0.5), 
+    panel.grid = element_blank()
+  )
+
+ANCOMBC2_ID_heatmap
+
+
+# Barplot
+# get symmetric limits
+x_max <- max(abs(sig_asvs_tax_ID_deep$lfc_Coral_SpeciesPoc), na.rm = TRUE)
+
+# plot
+ACOMBC2_ID_bar <- ggplot(sig_asvs_tax_ID_deep,
+       aes(x = lfc_Coral_SpeciesPoc,
+           y = reorder(ASV_Family, lfc_Coral_SpeciesPoc))) +
+  
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_errorbarh(aes(
+    xmin = lfc_Coral_SpeciesPoc - se_Coral_SpeciesPoc,
+    xmax = lfc_Coral_SpeciesPoc + se_Coral_SpeciesPoc
+  ),
+  height = 0.2) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  coord_cartesian(xlim = c(-x_max, x_max)) +
+  annotate("text", y = Inf, x = x_max, label = "Por",
+           hjust = 1.1, vjust = 1.5, size = 4, fontface = "bold") +
+  annotate("text", y = Inf, x = -x_max, label = "Poc",
+           hjust = -0.1, vjust = 1.5, size = 4, fontface = "bold") +
+  labs(
+    x = "Log fold change (Por vs Poc in a deep depth)",
+    y = "ASV_Family"
+  ) +
+  theme_minimal()
+
+ACOMBC2_ID_bar
+```
+
+## ANCOM-BC: Shallow vs. Deeper depth of Porites cf. lobata
+
+```{r}
+# ANCOM-BC2
+set.seed(124)
+
+# ANCOMBC2
+# first seperate phyloseq based on Coral_Species
+ps_df_filtered_por <- subset_samples(ps_ID_filtered, Coral_Species == "Por")
+
+# check if it worked
+table(sample_data(ps_df_filtered_por)$Coral_Species)
+
+# set reference level, to make sure Shallow is compared to Deep
+sample_data(ps_df_filtered_por)$Condition <- factor(
+  sample_data(ps_df_filtered_por)$Condition,
+  levels = c("Shallow", "Deep")
+)
+
+# ANCOM-BC2
+ancombc2_ID_por <- ancombc2(
+  data = ps_df_filtered_por,
+  fix_formula = "Condition", # the fixed factor we are interested in
+  p_adj_method = "BH", # method to adjust p-value for multiple testing, by controlling FDR, Benjamini-Hochberg: common method for ASV data not too conservative and balances false positives and false ne.
+  pseudo_sens = TRUE, # checks if significant taxa are sensitive to pseudo counts (diff_robust:..)
+  prv_cut = 0.10, # removed very rare ASV present
+  lib_cut = 100, # removes samples with low read number
+  s0_perc = 0.05,  # stabilizes the test statistics by adding a small constant, default
+  alpha = 0.05, # standard significance threshold
+  group = NULL, # NULL because only 2 groups
+  struc_zero = FALSE, # small sample size so start with False
+  neg_lb = FALSE, # controls that a conservative lower bound-based approach, only used when struc_zero = T, rather for larger sample size
+  pairwise = FALSE, # pairwise comparison, not used because only two groups
+  global = FALSE, # only two groups
+  tax_level = NULL, # ASV level wanted
+  em_control = list(tol = 1e-05, max_iter = 100), # default: algorithm calcultation rounds and threshold
+  verbose = TRUE # shows what is happening while the alogrith is running
+)
+
+
+# ancom results
+res_primary_ID_por = ancombc2_ID_por$res
+
+# how many ASVs were tested in total
+nrow(res_primary_ID_por) 
+# 2533
+
+# count how many are NA
+sum(is.na(res_primary_ID_por$"lfc_(Intercept)"))
+# 79
+
+# find significant ASVS across Location
+# counts ASVs that are significant in at least one comparison
+sig_asvs_ID_por <- res_primary_ID_por[res_primary_ID_por$diff_ConditionDeep == TRUE, ]
+
+# how many remain
+nrow(sig_asvs_ID_por)
+# 420
+
+# counts ASVs that are significant in at least one comparison
+sig_asvs_ID_por <- sig_asvs_ID_por[sig_asvs_ID_por$passed_ss_ConditionDeep == TRUE, ]
+
+nrow(sig_asvs_ID_por)
+# 17 sig ASV passed the ANCOM-BC2 sensitivity analysis = result is robust
+
+# download sig ASV ANCOM-BC2 table
+write.xlsx(sig_asvs_ID_por, file = "/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/ANCOM/2025_ID_GAd_sig_asv_ANCOMBC2_ShallowvsDeeper_Poriteslobata.xlsx", rowNames = TRUE)
+
+
+# extract taxonomy from phyloseq
+tax_ID <- tax_table(ps_ID_filtered)
+tax_ID_df <- as.data.frame(tax_ID)
+tax_ID_df$taxon <- rownames(tax_ID_df)
+
+# join taxonomy
+sig_asvs_tax_ID_por <- sig_asvs_ID_por %>%
+  left_join(
+    tax_ID_df %>% select(taxon, Phylum, Order, Family, Genus, Species),
+    by = "taxon"
+  )
+
+# replace missing Family names
+sig_asvs_tax_ID_por <- sig_asvs_tax_ID_por %>%
+  mutate(Family = ifelse(is.na(Family), "Unknown", Family))
+
+# create combined ASV-family label
+sig_asvs_tax_ID_por <- sig_asvs_tax_ID_por %>%
+  mutate(ASV_Family = paste(taxon, Family, sep = "_"))
+
+# keep only the log fold change column for Top vs Bottom
+heatmap_df_ID_por <- sig_asvs_tax_ID_por %>%
+  dplyr::select(ASV_Family, lfc_ConditionDeep) %>%
+  dplyr::rename(LFC = lfc_ConditionDeep) %>%
+  dplyr::mutate(Comparison = "Shallow_vs_Deep")
+
+# order rows by log fold change
+asv_order_ID_por <- heatmap_df_ID_por %>%
+  arrange(LFC) %>%
+  pull(ASV_Family)
+
+heatmap_df_ID_por$ASV_Family <- factor(heatmap_df_ID_por$ASV_Family, levels = asv_order_ID_por)
+
+# heatmap
+ANCOMBC2_ID_heatmap <- ggplot(heatmap_df_ID_por, aes(x = Comparison, y = ASV_Family, fill = LFC)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(LFC, 2)), size = 3, color = "black") +
+  scale_fill_gradient2(
+    low = "blue",
+    mid = "white",
+    high = "red",
+    midpoint = 0,
+    na.value = "grey90"
+  ) +
+  
+  labs(
+    x = "Comparison",
+    y = "ASV_Family",
+  fill = "Log fold change"
+  ) +
+  
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 0, hjust = 0.5), 
+    panel.grid = element_blank()
+  )
+
+ANCOMBC2_ID_heatmap
+# save as pdf
+ggsave('/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Manuscript/Manuscript_Final_Figures/Suppl_Fig_ANCOM_heatmap_Porites_Shallow_vs_Deep.pdf', plot = ANCOMBC2_ID_heatmap, width = 8, height = 9, dpi = 300, bg = "white")
+
+
+
+# Barplot
+# get symmetric limits
+x_max <- max(abs(sig_asvs_tax_ID_por$lfc_ConditionDeep), na.rm = TRUE)
+
+# plot
+ACOMBC2_ID_bar <- ggplot(sig_asvs_tax_ID_por,
+       aes(x = lfc_ConditionDeep,
+           y = reorder(ASV_Family, lfc_ConditionDeep))) +
+  
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_errorbarh(aes(
+    xmin = lfc_ConditionDeep - se_ConditionDeep,
+    xmax = lfc_ConditionDeep + se_ConditionDeep
+  ),
+  height = 0.2) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  coord_cartesian(xlim = c(-x_max, x_max)) +
+  annotate("text", y = Inf, x = x_max, label = "Shallow",
+           hjust = 1.1, vjust = 1.5, size = 4, fontface = "bold") +
+  annotate("text", y = Inf, x = -x_max, label = "Deeper",
+           hjust = -0.1, vjust = 1.5, size = 4, fontface = "bold") +
+  labs(
+    x = "Log fold change (Shallow vs Deeper of Porites cf. lobata)",
+    y = "ASV_Family"
+  ) +
+  theme_minimal()
+
+ACOMBC2_ID_bar
+
+# save as pdf
+ggsave('/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Manuscript/Manuscript_Final_Figures/Suppl_Fig_ANCOM_Porites_Shallow_vs_Deep.pdf', plot = ACOMBC2_ID_bar, width = 8, height = 9, dpi = 300, bg = "white")
+
+
+```
+
+## ANCOM-BC: Shallow vs. Deeper depth of Pocillopora cf. damicronis
+
+```{r}
+# Pocillopora
+# first seperate phyloseq based on Coral_Species
+ps_df_filtered_poc <- subset_samples(ps_ID_filtered, Coral_Species == "Poc")
+
+# check if it worked
+table(sample_data(ps_df_filtered_poc)$Coral_Species)
+
+# set reference level, to make sure Shallow is compared to Deep
+sample_data(ps_df_filtered_poc)$Condition <- factor(
+  sample_data(ps_df_filtered_poc)$Condition,
+  levels = c("Shallow", "Deep")
+)
+
+# ANCOM-BC2
+# ANCOM-BC2
+ancombc2_ID_poc <- ancombc2(
+  data = ps_df_filtered_poc,
+  fix_formula = "Condition", # the fixed factor we are interested in
+  p_adj_method = "BH", # method to adjust p-value for multiple testing, by controlling FDR, Benjamini-Hochberg: common method for ASV data not too conservative and balances false positives and false ne.
+  pseudo_sens = TRUE, # checks if significant taxa are sensitive to pseudo counts (diff_robust:..)
+  prv_cut = 0.10, # removed very rare ASV present
+  lib_cut = 100, # removes samples with low read number
+  s0_perc = 0.05,  # stabilizes the test statistics by adding a small constant, default
+  alpha = 0.05, # standard significance threshold
+  group = NULL, # NULL because only 2 groups
+  struc_zero = FALSE, # small sample size so start with False
+  neg_lb = FALSE, # controls that a conservative lower bound-based approach, only used when struc_zero = T, rather for larger sample size
+  pairwise = FALSE, # pairwise comparison, not used because only two groups
+  global = FALSE, # only two groups
+  tax_level = NULL, # ASV level wanted
+  em_control = list(tol = 1e-05, max_iter = 100), # default: algorithm calcultation rounds and threshold
+  verbose = TRUE # shows what is happening while the alogrith is running
+)
+
+# ancom results
+res_primary_ID_poc = ancombc2_ID_poc$res
+
+# how many ASVs were tested in total
+nrow(res_primary_ID_poc) 
+# 2490
+
+# count how many are NA
+sum(is.na(res_primary_ID_poc$"lfc_(Intercept)"))
+# 50
+
+# find significant ASVS across Location
+# counts ASVs that are significant in at least one comparison
+sig_asvs_ID_poc <- res_primary_ID_poc[res_primary_ID_poc$diff_ConditionDeep == TRUE, ]
+
+# how many remain
+nrow(sig_asvs_ID_poc)
+# 575
+
+# counts ASVs that are significant in at least one comparison
+sig_asvs_ID_poc <- sig_asvs_ID_poc[sig_asvs_ID_poc$passed_ss_ConditionDeep == TRUE, ]
+
+nrow(sig_asvs_ID_poc)
+# 0 sig ASV passed the ANCOM-BC2 sensitivity analysis = result is robust
+
+# download sig ASV ANCOM-BC2 table
+write.xlsx(sig_asvs_ID_poc, file = "/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/ANCOM/2025_ID_GAd_sig_asv_ANCOMBC2_ShallowvsDeeper_Pocilloporadamicornis.xlsx", rowNames = TRUE)
+
+# check which sig. asvs pass the SS robust test
+# counts ASVs that are significant in at least one comparison
+sig_asvs_ID_poc <- sig_asvs_ID_poc[sig_asvs_ID_poc$passed_ss_ConditionDeep == TRUE, ]
+
+nrow(sig_asvs_ID_poc)
+# no sig ASV passed the ANCOM-BC2 sensitivity analysis = result is not robust
+
+# extract taxonomy from phyloseq
+tax_ID <- tax_table(ps_ID_filtered)
+tax_ID_df <- as.data.frame(tax_ID)
+tax_ID_df$taxon <- rownames(tax_ID_df)
+
+# join taxonomy
+sig_asvs_tax_ID_poc <- sig_asvs_ID_poc %>%
+  left_join(
+    tax_ID_df %>% select(taxon, Phylum, Order, Family, Genus, Species),
+    by = "taxon"
+  )
+
+# replace missing Family names
+sig_asvs_tax_ID_poc <- sig_asvs_tax_ID_poc %>%
+  mutate(Family = ifelse(is.na(Family), "Unknown", Family))
+
+# create combined ASV-family label
+sig_asvs_tax_ID_poc <- sig_asvs_tax_ID_poc %>%
+  mutate(ASV_Family = paste(taxon, Family, sep = "_"))
+
+# download sig ASV ANCOM-BC2 table
+write.xlsx(sig_asvs_tax_ID_poc, file = "/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/ANCOM/2025_ID_GAd_sig_asv_ANCOMBC2_ShallowvsDeeper_Pocilloporadamicornis.xlsx", rowNames = TRUE)
+
+
+
+
+# keep only the log fold change column for Top vs Bottom
+heatmap_df_ID_poc <- sig_asvs_tax_ID_poc %>%
+  dplyr::select(ASV_Family, lfc_ConditionDeep) %>%
+  dplyr::rename(LFC = lfc_ConditionDeep) %>%
+  dplyr::mutate(Comparison = "Shallow_vs_Deep")
+
+# order rows by log fold change
+asv_order_ID <- heatmap_df_ID_poc %>%
+  arrange(LFC) %>%
+  pull(ASV_Family)
+
+heatmap_df_ID_poc$ASV_Family <- factor(heatmap_df_ID_poc$ASV_Family, levels = asv_order_ID)
+
+# heatmap
+ANCOMBC2_ID_heatmap_poc <- ggplot(heatmap_df_ID_poc, aes(x = Comparison, y = ASV_Family, fill = LFC)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(LFC, 2)), size = 3, color = "black") +
+  scale_fill_gradient2(
+    low = "blue",
+    mid = "white",
+    high = "red",
+    midpoint = 0,
+    na.value = "grey90"
+  ) +
+  
+  labs(
+    x = "Comparison",
+    y = "ASV_Family",
+  fill = "Log fold change"
+  ) +
+  
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 0, hjust = 0.5), 
+    panel.grid = element_blank()
+  )
+
+ANCOMBC2_ID_heatmap_poc
+
+
+# Barplot
+# get symmetric limits
+x_max <- max(abs(sig_asvs_tax_ID_poc$lfc_ConditionDeep), na.rm = TRUE)
+
+# plot
+ACOMBC2_ID_bar <- ggplot(sig_asvs_tax_ID_poc,
+       aes(x = lfc_ConditionDeep,
+           y = reorder(ASV_Family, lfc_ConditionDeep))) +
+  
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_errorbarh(aes(
+    xmin = lfc_ConditionDeep - se_ConditionDeep,
+    xmax = lfc_ConditionDeep + se_ConditionDeep
+  ),
+  height = 0.2) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  coord_cartesian(xlim = c(-x_max, x_max)) +
+  annotate("text", y = Inf, x = x_max, label = "Shallow",
+           hjust = 1.1, vjust = 1.5, size = 4, fontface = "bold") +
+  annotate("text", y = Inf, x = -x_max, label = "Deeper",
+           hjust = -0.1, vjust = 1.5, size = 4, fontface = "bold") +
+  labs(
+    x = "Log fold change (Shallow vs Deeper of Pocillopora cf. damicornis)",
+    y = "ASV_Family"
+  ) +
+  theme_minimal()
+
+ACOMBC2_ID_bar
+```
+
+# Supplementary Figures
+
+## Suppl. Fig S1: Thermal profiles during CBASS acute heat stress assays
+
+```{r}
+# upload hobo data
+CBASS1 <- read.csv("/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/CBASS_HOBO/HOBO_cleaned/CBASS_HOBO_Rcleaned/20250302_ID_GAD_CBASS1_HOBO.csv")
+CBASS3 <- read.csv("/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/CBASS_HOBO/HOBO_cleaned/CBASS_HOBO_Rcleaned/20250302_ID_GAD_CBASS3_HOBO.csv")
+CBASS4 <- read.csv("/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/CBASS_HOBO/HOBO_cleaned/CBASS_HOBO_Rcleaned/20250302_ID_GAD_CBASS4_HOBO.csv")
+CBASS5 <- read.csv("/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/CBASS_HOBO/HOBO_cleaned/CBASS_HOBO_Rcleaned/20250302_ID_GAD_CBASS5_HOBO.csv")
+CBASS6 <- read.csv("/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/CBASS_HOBO/HOBO_cleaned/CBASS_HOBO_Rcleaned/20250302_ID_GAD_CBASS6_HOBO.csv")
+
+# set colors
+cbass_colors <- c(
+  "28" = "blue",
+  "34" = "yellow",
+  "37" = "orange",
+  "39" = "red"
+)
+
+
+# CBASS 1
+# plot data
+CBASS1 <- CBASS1 %>%
+  mutate(
+    DateTime = as.POSIXct(
+      paste(Date, Time, AM_PM),
+      format = "%d.%m.%y %I:%M:%S %p",
+      tz = "UTC"
+    )
+  ) %>%
+  filter(!is.na(DateTime))
+
+
+plot_CBASS1 <- ggplot(
+  CBASS1,
+  aes(
+    x = DateTime,
+    y = Temperature,
+    color = as.factor(CBASS_Temp),
+    group = CBASS_Temp
+  )
+) +
+  geom_line(linewidth = 1) +
+  
+  scale_color_manual(
+    name = "CBASS Temperature (°C)",
+    values = cbass_colors
+  ) +
+  
+  scale_x_datetime(date_labels = "%I:%M %p") +
+  
+  scale_y_continuous(
+    limits = c(25, 45),
+    breaks = seq(25, 45, 5)
+  ) +
+  
+  labs(
+    title = "CBASS Run 1",
+    x = "Time",
+    y = "Temperature (°C)"
+  ) +
+  
+  theme_minimal()
+
+plot_CBASS1
+
+#calculate mean holding phase
+cbass1_mean_holdingtemp <- CBASS1 %>%
+  filter(Time >= "02:20:00" & Time <= "05:20:00") %>%
+  group_by(CBASS_Temp) %>%
+  summarise(
+    mean_Temp = round(mean(Temperature, na.rm = TRUE), 2),
+    n = n()
+  )
+
+cbass1_mean_holdingtemp
+
+
+
+# CBASS 3
+# plot data
+CBASS3 <- CBASS3 %>%
+  mutate(
+    DateTime = as.POSIXct(
+      paste(Date, Time, AM_PM),
+      format = "%d.%m.%y %I:%M:%S %p",
+      tz = "UTC"
+    )
+  ) %>%
+  filter(!is.na(DateTime))
+
+
+
+plot_CBASS3 <- ggplot(
+  CBASS3,
+  aes(
+    x = DateTime,
+    y = Temperature,
+    color = as.factor(CBASS_Temp),
+    group = CBASS_Temp
+  )
+) +
+  geom_line(linewidth = 1) +
+  
+  scale_color_manual(
+    name = "CBASS Temperature (°C)",
+    values = cbass_colors
+  ) +
+  
+  scale_x_datetime(date_labels = "%I:%M %p") +
+  
+  scale_y_continuous(
+    limits = c(25, 45),
+    breaks = seq(25, 45, 5)
+  ) +
+  
+  labs(
+    title = "CBASS Run 3",
+    x = "Time",
+    y = "Temperature (°C)"
+  ) +
+  
+  theme_minimal()
+
+plot_CBASS3
+
+#calculate mean holding phase
+cbass3_mean_holdingtemp <- CBASS3 %>%
+  filter(Time >= "03:10:00" & Time <= "06:10:00") %>%
+  group_by(CBASS_Temp) %>%
+  summarise(
+    mean_Temp = round(mean(Temperature, na.rm = TRUE), 2),
+    n = n()
+  )
+
+cbass3_mean_holdingtemp
+
+
+# CBASS 4
+# plot data
+CBASS4 <- CBASS4 %>%
+  mutate(
+    DateTime = as.POSIXct(
+      paste(Date, Time, AM_PM),
+      format = "%d.%m.%y %I:%M:%S %p",
+      tz = "UTC"
+    )
+  ) %>%
+  filter(!is.na(DateTime))
+
+
+plot_CBASS4 <- ggplot(
+  CBASS4,
+  aes(
+    x = DateTime,
+    y = Temperature,
+    color = as.factor(CBASS_Temp),
+    group = CBASS_Temp
+  )
+) +
+  geom_line(linewidth = 1) +
+  
+  scale_color_manual(
+    name = "CBASS Temperature (°C)",
+    values = cbass_colors
+  ) +
+  
+  scale_x_datetime(date_labels = "%I:%M %p") +
+  
+  scale_y_continuous(
+    limits = c(25, 45),
+    breaks = seq(25, 45, 5)
+  ) +
+  
+  labs(
+    title = "CBASS Run 4",
+    x = "Time",
+    y = "Temperature (°C)"
+  ) +
+  
+  theme_minimal()
+
+plot_CBASS4
+
+#calculate mean holding phase
+cbass4_mean_holdingtemp <- CBASS4 %>%
+  filter(Time >= "03:26:00" & Time <= "06:26:00") %>%
+  group_by(CBASS_Temp) %>%
+  summarise(
+    mean_Temp = round(mean(Temperature, na.rm = TRUE), 2),
+    n = n()
+  )
+
+cbass4_mean_holdingtemp
+
+
+
+# plot data
+CBASS5 <- CBASS5 %>%
+  mutate(
+    DateTime = as.POSIXct(
+      paste(Date, Time, AM_PM),
+      format = "%d.%m.%y %I:%M:%S %p",
+      tz = "UTC"
+    )
+  ) %>%
+  filter(!is.na(DateTime))
+
+
+# CBASS 5
+plot_CBASS5 <- ggplot(
+  CBASS5,
+  aes(
+    x = DateTime,
+    y = Temperature,
+    color = as.factor(CBASS_Temp),
+    group = CBASS_Temp
+  )
+) +
+  geom_line(linewidth = 1) +
+  
+  scale_color_manual(
+    name = "CBASS Temperature (°C)",
+    values = cbass_colors
+  ) +
+  
+  scale_x_datetime(date_labels = "%I:%M %p") +
+  
+  scale_y_continuous(
+    limits = c(25, 45),
+    breaks = seq(25, 45, 5)
+  ) +
+  
+  labs(
+    title = "CBASS Run 5",
+    x = "Time",
+    y = "Temperature (°C)"
+  ) +
+  
+  theme_minimal()
+
+plot_CBASS5
+
+
+#calculate mean holding phase
+cbass5_mean_holdingtemp <- CBASS5 %>%
+  filter(Time >= "03:20:00" & Time <= "06:20:00") %>%
+  group_by(CBASS_Temp) %>%
+  summarise(
+    mean_Temp = round(mean(Temperature, na.rm = TRUE), 2),
+    n = n()
+  )
+
+cbass5_mean_holdingtemp
+
+
+# CBASS 6
+# plot data
+CBASS6 <- CBASS6 %>%
+  mutate(
+    DateTime = as.POSIXct(
+      paste(Date, Time, AM_PM),
+      format = "%d.%m.%y %I:%M:%S %p",
+      tz = "UTC"
+    )
+  ) %>%
+  filter(!is.na(DateTime))
+
+plot_CBASS6 <- ggplot(
+  CBASS6,
+  aes(
+    x = DateTime,
+    y = Temperature,
+    color = as.factor(CBASS_Temp),
+    group = CBASS_Temp
+  )
+) +
+  geom_line(linewidth = 1) +
+  
+  scale_color_manual(
+    name = "CBASS Temperature (°C)",
+    values = cbass_colors
+  ) +
+  
+  scale_x_datetime(date_labels = "%I:%M %p") +
+  
+  scale_y_continuous(
+    limits = c(25, 45),
+    breaks = seq(25, 45, 5)
+  ) +
+  
+  labs(
+    title = "CBASS Run 6",
+    x = "Time",
+    y = "Temperature (°C)"
+  ) +
+  
+  theme_minimal()
+
+plot_CBASS6
+
+#calculate mean holding phase
+cbass6_mean_holdingtemp <- CBASS6 %>%
+  filter(Time >= "02:25:00" & Time <= "05:25:00") %>%
+  group_by(CBASS_Temp) %>%
+  summarise(
+    mean_Temp = round(mean(Temperature, na.rm = TRUE), 2),
+    n = n()
+  )
+
+cbass6_mean_holdingtemp
+
+
+
+
+# Plot all together
+# prepare each plot for plotting together
+
+# Top row: remove x-axis labels/ticks/text
+plot_CBASS3 <- plot_CBASS3 +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+
+plot_CBASS4 <- plot_CBASS4 +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+plot_CBASS6 <- plot_CBASS6 +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+
+# combine all plots
+hobo_combined_plot <-
+  (
+    plot_CBASS1 +
+    plot_CBASS3 +
+    plot_CBASS4
+  ) /
+  (
+    plot_CBASS5 +
+    plot_CBASS6 +
+    patchwork::plot_spacer()
+  ) +
+  plot_layout(guides = "collect") &
+  theme(
+    legend.position = "bottom"
+  )
+
+hobo_combined_plot
+
+# save as pdf
+ggsave('/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Manuscript/Manuscript_Final_Figures/New_16.06/Suppl_Fig_HOBO.pdf', plot = hobo_combined_plot, width = 8, height = 9, dpi = 300, bg = "white")
+
+# figure was further adjusted usinf Affinity designer
+
+```
+
+# Supplementary Tables
+
+## Remove Outliers
+
+```{r}
+# the IQR method
+# What is Interquartile ranges or IQR?
+# The IQR describes the middle 50% of values when ordered from lowest to highest.
+# The IQR is then the difference between Third quartile and First quartile.
+# General equation to calculate Interquartile range or in other words the bulk of values. To determine IQR we need to get Third quartile and first quartile.
+
+# What is Quartiles?
+# Likewise percentile, a quartile instead cuts the data in 4 equal parts. Hence, 25th percentile is our first quartile, 50th percentile is second quartile, 75th percentile is our third quartile.
+# --> Then use IQR to calculate the limits for our values to lie in between.
+
+# Write Species more simple for data anlysis and visualization
+eds_combined$Species <- dplyr::recode(
+  eds_combined$Species,
+  "Porites cf. lobata" = "Porites lobata",
+  "Pocillopora cf. damicornis" = "Pocillopora damicornis"
+)
+
+# create three new dataframes for ED5, ED50 and ED95
+eds_ED5 <- eds_combined %>%
+  select(-ED50, -ED95)
+
+eds_ED50 <- eds_combined %>%
+  select(-ED5, -ED95)
+
+eds_ED95 <- eds_combined %>%
+  select(-ED5, -ED50)
+
+# Identify outliers in ED5 by Species and Condition
+eds_ED5_clean <- eds_ED5 %>%
+  group_by(Species, Condition) %>% # group by Species and Condition to detect outliers
+  mutate(
+    Q1 = quantile(ED5, 0.25, na.rm = TRUE),   # determines the firt quantile: the 25% quantile of ED5
+    Q3 = quantile(ED5, 0.75, na.rm = TRUE),   # determines the third quantil the 75% quantil of ED5
+    IQR = Q3 - Q1,                            # determines the middle 50% of values, difference between third and first                                                 quartile
+    lower = Q1 - 1.5 * IQR,                   # defines the lower outlier boundary, 1.5 is defined by the Tukey method
+    upper = Q3 + 1.5 * IQR,                   # defines the upper outlier boundary
+    is_outlier = ED5 < lower | ED5 > upper    # define outliers when they are lower or higher than the range
+  ) %>%
+  ungroup()
+
+# check outliers
+eds_ED5_clean %>% filter(is_outlier == TRUE)
+
+# remove outliers
+eds_ED5_nooutliers <- eds_ED5_clean %>% 
+  filter(is_outlier == FALSE)
+
+# check sample number before and after removing outliers 
+eds_ED5 %>%
+  group_by(Species, Condition) %>%
+  summarise(n = n())
+# Porites: 20,20 Poci: 25, 25
+
+eds_ED5_nooutliers %>%
+  group_by(Species, Condition) %>%
+  summarise(n = n())
+# Porites: 17, 18, Poci: 24, 24
+
+# inspect visually
+ggplot(eds_ED5_clean, aes(x = Condition, y = ED5, color = is_outlier)) +
+  geom_boxplot(outlier.shape = NA) +
+  facet_wrap(~Species)
+
+
+# Identify outliers in ED50 by Species and Condition
+eds_ED50_clean <- eds_ED50 %>%
+  group_by(Species, Condition) %>%
+  mutate(
+    Q1 = quantile(ED50, 0.25, na.rm = TRUE), # extract 25th percentile
+    Q3 = quantile(ED50, 0.75, na.rm = TRUE), # extract 75 percentile
+    IQR = Q3 - Q1,
+    lower = Q1 - 1.5 * IQR,  # calculate lower and upper bounds
+    upper = Q3 + 1.5 * IQR,
+    is_outlier = ED50 < lower | ED50 > upper
+  ) %>%
+  ungroup()
+
+# check outliers
+eds_ED50_clean %>% filter(is_outlier == TRUE)
+
+# remove outliers
+eds_ED50_nooutliers <- eds_ED50_clean %>% 
+  filter(is_outlier == FALSE)
+
+# check sample number before and after removing outliers 
+eds_ED50 %>%
+  group_by(Species, Condition) %>%
+  summarise(n = n())
+# Porites: 20,20 Poci: 25, 25
+
+eds_ED50_nooutliers %>%
+  group_by(Species, Condition) %>%
+  summarise(n = n())
+# Porites: 16, 18 Poci: 25, 24
+
+# Identify outliers in ED95 by Species and Condition
+eds_ED95_clean <- eds_ED95 %>%
+  group_by(Species, Condition) %>%
+  mutate(
+    Q1 = quantile(ED95, 0.25, na.rm = TRUE),
+    Q3 = quantile(ED95, 0.75, na.rm = TRUE),
+    IQR = Q3 - Q1,
+    lower = Q1 - 1.5 * IQR,
+    upper = Q3 + 1.5 * IQR,
+    is_outlier = ED95 < lower | ED95 > upper
+  ) %>%
+  ungroup()
+
+# check outliers
+eds_ED95_clean %>% filter(is_outlier == TRUE)
+
+# remove outliers
+eds_ED95_nooutliers <- eds_ED95_clean %>% 
+  filter(is_outlier == FALSE)
+
+# check sample number before and after removing outliers 
+eds_ED95 %>%
+  group_by(Species, Condition) %>%
+  summarise(n = n())
+# Porites: 20,20 Poci: 25, 25
+
+eds_ED95_nooutliers %>%
+  group_by(Species, Condition) %>%
+  summarise(n = n())
+# Porites: 19,17 Poci: 24,24
+
+# create new dataframe without outliers
+eds_nooutliers_long <- bind_rows(
+  eds_ED5_nooutliers  %>% mutate(ED_type = "ED5",  ED_value = ED5),
+  eds_ED50_nooutliers %>% mutate(ED_type = "ED50", ED_value = ED50),
+  eds_ED95_nooutliers %>% mutate(ED_type = "ED95", ED_value = ED95)
+) %>%
+  select(-ED5, -ED50, -ED95)
+
+#check data frame
+eds_nooutliers_long %>%
+group_by(Species, Condition, ED_type) %>%
+summarise(n = n())
+
+```
+
+## Overview Tables EDs and Decline width
+
+```{r}
+# Supplementary Table S1
+# Overview Table: Mean EDs and Decline width
+ed_table <- eds_combined %>%
+  mutate(
+    Species = factor(Species, levels = c("Porites lobata", "Pocillopora damicornis")),
+    Condition = factor(Condition, levels = c("shallow", "deep"))
+  ) %>%
+  group_by(Species, Condition) %>%
+  summarise(
+    mean_ED5  = round(mean(ED5, na.rm = TRUE), 2),
+    mean_ED50 = round(mean(ED50, na.rm = TRUE), 2),
+    mean_ED95 = round(mean(ED95, na.rm = TRUE), 2),
+    n = sum(!is.na(ED50)),
+    .groups = "drop"
+  ) %>%
+  arrange(Species, Condition)
+
+# calculate decline width
+ed_table <- ed_table %>%
+  mutate(decline_width = round(mean_ED95 - mean_ED5, 2)
+  )
+ed_table
+
+
+# Supplementary Table S2
+eds_nooutliers_clean <- eds_nooutliers_long %>%
+  select(
+    -Q1, -Q3, -IQR, -lower, -upper, -is_outlier
+  ) %>%
+  distinct()
+
+eds_nooutliers_clean <- eds_nooutliers_clean %>%
+  distinct()
+
+# calculate mean 
+eds_nooutliers_clean_fixed <- eds_nooutliers_clean %>%
+  group_by(Date, Site, Reef, Species, Genotype, Depth, Condition, ED_type) %>%
+  summarise(
+    ED_value = mean(ED_value, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# change to wide
+eds_nooutliers_wide <- eds_nooutliers_clean_fixed %>%
+  pivot_wider(
+    names_from = ED_type,
+    values_from = ED_value
+  )
+
+# change to wide
+eds_nooutliers_wide <- eds_nooutliers_clean %>%
+  pivot_wider(
+    names_from = ED_type,
+    values_from = ED_value
+  )
+# some NAs because outliers were removed so e.g. ED5 and ED95 but Ed50 of a specific sampled remained
+
+# Overview table
+ed_table_nooutliers <- eds_nooutliers_wide %>%
+  mutate(
+    Species = factor(Species, levels = c("Porites lobata", "Pocillopora damicornis")),
+    Condition = factor(Condition, levels = c("shallow", "deep"))
+  ) %>%
+  
+  group_by(Species, Condition) %>%
+  summarise(
+    mean_ED5  = round(mean(ED5, na.rm = TRUE), 2),
+    mean_ED50 = round(mean(ED50, na.rm = TRUE), 2),
+    mean_ED95 = round(mean(ED95, na.rm = TRUE), 2),
+    
+    n = sum(!is.na(ED50)),
+    .groups = "drop"
+  ) %>%
+  
+  mutate(
+    decline_width = round(mean_ED95 - mean_ED5, 2)
+  ) %>%
+  
+  arrange(Species, Condition)
+
+ed_table_nooutliers
+```
+
+# Statistical analysis
+
+## Thermal response - depth differences
+
+```{r}
+# Thermal tolernace: ED50
+
+# check assumptions
+# Is data normally distributed
+hist(eds_combined$ED50) # right skewed
+
+# run linear model first for inspecting the data and model assumptions
+model_ED50 <- lm(
+  ED50 ~ Species * Condition,
+  data = eds_combined
+)
+
+summary(model_ED50)
+anova(model_ED50)
+
+# check residuals
+par(mfrow = c(2, 2))
+plot(model_ED50)
+
+# insprect normality
+shapiro.test(residuals(model_ED50))
+# significant, not normally distirbuted
+
+#inspect homogeneity of variance
+leveneTest(
+  ED50 ~ Species * Condition,
+  data = eds_combined
+)
+# significant --> do robustness check for significant results
+
+# permutation two-way anova
+set.seed(123)
+
+perm_ED50 <- aovperm(
+  ED50 ~ Species * Condition,
+  data = eds_combined,
+  np = 9999,
+  method = "freedman_lane"
+)
+
+perm_ED50
+
+# sensitivity check because levene test is significant
+model_ED50 <- lm(
+  ED50 ~ Species * Condition,
+  data = eds_combined,
+  contrasts = list(
+    Species = contr.sum,
+    Condition = contr.sum
+  )
+)
+
+Anova(model_ED50, type = 3, white.adjust = "hc3")
+# same result as the ANOVA: results are robust.
+
+
+
+# Breakpoint temperature: ED5
+
+# check assumptions
+# Is data normally distributed
+hist(eds_combined$ED5)
+
+# run linear model first for inspecting the data and model assumptions
+model_ED5 <- lm(
+  ED5 ~ Species * Condition,
+  data = eds_combined
+)
+
+summary(model_ED5)
+anova(model_ED5)
+
+# check residuals
+par(mfrow = c(2, 2))
+plot(model_ED5)
+
+# inspect normality
+shapiro.test(residuals(model_ED5))
+# significant
+
+#inspect homogeneity of variance
+leveneTest(
+  ED5 ~ Species * Condition,
+  data = eds_combined
+)
+# significant --> check robustness
+
+#permutation two-way anova
+set.seed(123)
+
+perm_ED5 <- aovperm(
+  ED5 ~ Species * Condition,
+  data = eds_combined,
+  np = 9999,
+  method = "freedman_lane"
+)
+
+perm_ED5
+# Condition: =0.008501
+
+# sensitivity check because levene test is significant
+model_ED5 <- lm(
+  ED5 ~ Species * Condition,
+  data = eds_combined,
+  contrasts = list(
+    Species = contr.sum,
+    Condition = contr.sum
+  )
+)
+
+Anova(model_ED5, type = 3, white.adjust = "hc3")
+# same result as the ANOVA: results are robust.
+
+
+# Decline Wdith: DW
+
+# check assumptions
+# Is data normally distributed
+hist(eds_combined$decline_width)
+
+# linear model
+model_DW <- lm(
+  decline_width ~ Species * Condition,
+  data = eds_combined
+)
+
+summary(model_DW)
+anova(model_DW)
+
+# check residuals
+par(mfrow = c(2, 2))
+plot(model_DW)
+
+# insprect normality
+shapiro.test(residuals(model_DW))
+# significant
+
+#inspect homogeneity of variance
+leveneTest(
+  decline_width ~ Species * Condition,
+  data = eds_combined
+)
+# significant --> check for robustness
+
+# permutation two-way anova
+set.seed(123)
+
+perm_DW <- aovperm(
+  decline_width ~ Species * Condition,
+  data = eds_combined,
+  np = 9999,
+  method = "freedman_lane"
+)
+
+perm_DW
+# Species: significant
+# COndition: not significant
+
+# sensitivity check because levene test is significant
+model_DW <- lm(
+  decline_width ~ Species * Condition,
+  data = eds_combined,
+  contrasts = list(
+    Species = contr.sum,
+    Condition = contr.sum
+  )
+)
+
+Anova(model_DW, type = 3, white.adjust = "hc3")
+# same result as the ANOVA: results are robust.
+
+
+
+
+
+
+
+# Thermal limit: ED95
+
+# check assumptions
+# Is data normally distributed
+hist(eds_combined$ED95)
+
+# linear model
+model_ED95 <- lm(
+  ED95 ~ Species * Condition,
+  data = eds_combined
+)
+
+summary(model_ED95)
+anova(model_ED95)
+
+# check residuals
+par(mfrow = c(2, 2))
+plot(model_ED95)
+# looks not normally distributed
+
+# insprect normality
+shapiro.test(residuals(model_ED95))
+# significant
+
+#inspect homogeneity of variance
+leveneTest(
+  ED95 ~ Species * Condition,
+  data = eds_combined
+)
+# not significant --> no robustness test needed
+
+# permutation two-way anova
+set.seed(123)
+
+perm_ED95 <- aovperm(
+  ED95 ~ Species * Condition,
+  data = eds_combined,
+  np = 9999,
+  method = "freedman_lane"
+)
+
+perm_ED95
+# not significant
+```
+
+## Thermal response without outliers - depth differences
+
+```{r}
+# Supplementary Table S3
+# Brekapoint temperature: ED5
+# run linear model first for inspecting the data and model assumptions
+model_ED5 <- lm(
+  ED5 ~ Species * Condition,
+  data = eds_nooutliers
+)
+
+summary(model_ED5)
+anova(model_ED5)
+
+# check residuals
+par(mfrow = c(2, 2))
+plot(model_ED5)
+
+# insprect normality
+shapiro.test(residuals(model_ED5))
+# significant
+
+#inspect homogeneity of variance
+leveneTest(
+  ED5 ~ Species * Condition,
+  data = eds_nooutliers
+)
+# significant
+
+# permutation two-way anova
+set.seed(123)
+
+perm_ED5 <- aovperm(
+  ED5 ~ Species * Condition,
+  data = eds_nooutliers,
+  np = 9999,
+  method = "freedman_lane"
+)
+
+perm_ED5
+
+# Supplementary Table S4
+# check data structure
+str(eds_nooutliers)
+eds_nooutliers$Condition <- factor(
+  eds_nooutliers$Condition,
+  levels = c("shallow", "deep")
+)
+
+# Condition effect within Pocillopora
+set.seed(123)
+poci_test <- independence_test(
+  ED5 ~ Condition,
+  data = subset(eds_nooutliers, Species == "Pocillopora damicornis"),
+  distribution = approximate(nresample = 9999)
+)
+# p-value = 0.0039
+
+# Condition effect within Porites
+set.seed(123)
+porites_test <- independence_test(
+  ED5 ~ Condition,
+  data = subset(eds_nooutliers, Species == "Porites lobata"),
+  distribution = approximate(nresample = 9999)
+)
+# p-value = 0.0044
+
+# Extract permutation p-values
+p_raw_condition <- c(
+  Pocillopora = pvalue(poci_test),
+  Porites = pvalue(porites_test)
+)
+p_raw_condition
+
+p.adjust(p_raw_condition, method = "holm")
+# in both species signficiant
+
+
+# Supplementary Table S5
+# make sure they are factors
+eds_nooutliers$Species <- factor(
+  eds_nooutliers$Species,
+  levels = c("Pocillopora damicornis", "Porites lobata")
+)
+
+# Species effect within shallow
+set.seed(123)
+shallow_test <- independence_test(
+  ED5 ~ Species,
+  data = subset(eds_nooutliers, Condition == "shallow"),
+  distribution = approximate(nresample = 9999)
+)
+
+# Species effect within deep
+set.seed(123)
+deep_test <- independence_test(
+  ED5 ~ Species,
+  data = subset(eds_nooutliers, Condition == "deep"),
+  distribution = approximate(nresample = 9999)
+)
+
+p_raw_species <- c(
+Shallow = pvalue(shallow_test),
+  Deep = pvalue(deep_test)
+)
+
+p_raw_species
+# shallow; significant
+# deep: not significant
+# Holm correction
+p.adjust(p_raw_species, method = "holm")
+
+
+
+# Supplementary Table S6
+# Thermal tolerance: ED50
+# run linear model first for inspecting the data and model assumptions
+model_ED50 <- lm(
+  ED50 ~ Species * Condition,
+  data = eds_nooutliers
+)
+
+summary(model_ED50)
+anova(model_ED50)
+
+# check residuals
+par(mfrow = c(2, 2))
+plot(model_ED50)
+
+# insprect normality
+shapiro.test(residuals(model_ED50))
+# significant
+
+#inspect homogeneity of variance
+leveneTest(
+  ED50 ~ Species * Condition,
+  data = eds_nooutliers
+)
+# significant
+
+# permutation two-way anova
+set.seed(123)
+
+perm_ED50 <- aovperm(
+  ED50 ~ Species * Condition,
+  data = eds_nooutliers,
+  np = 9999,
+  method = "freedman_lane"
+)
+
+perm_ED50
+
+# Supplementary Table S7
+# Condition effect within Pocillopora
+set.seed(123)
+poci_test <- independence_test(
+  ED50 ~ Condition,
+  data = subset(eds_nooutliers, Species == "Pocillopora damicornis"),
+  distribution = approximate(nresample = 9999)
+)
+# p-value = 0.0039
+
+# Condition effect within Porites
+set.seed(123)
+porites_test <- independence_test(
+  ED50 ~ Condition,
+  data = subset(eds_nooutliers, Species == "Porites lobata"),
+  distribution = approximate(nresample = 9999)
+)
+# p-value = 0.0044
+
+# Extract permutation p-values
+p_raw_condition <- c(
+  Pocillopora = pvalue(poci_test),
+  Porites = pvalue(porites_test)
+)
+p_raw_condition
+
+p.adjust(p_raw_condition, method = "holm")
+# in both species signficiant
+
+# Supplementary Table S8
+# Species effect within shallow
+set.seed(123)
+shallow_test <- independence_test(
+  ED50 ~ Species,
+  data = subset(eds_combined, Condition == "shallow"),
+  distribution = approximate(nresample = 9999)
+)
+
+# Species effect within deep
+set.seed(123)
+deep_test <- independence_test(
+  ED50 ~ Species,
+  data = subset(eds_combined, Condition == "deep"),
+  distribution = approximate(nresample = 9999)
+)
+
+p_raw_species <- c(
+Shallow = pvalue(shallow_test),
+  Deep = pvalue(deep_test)
+)
+
+p_raw_species
+# shallow; significant
+# deep: not significant
+
+# Holm correction
+p.adjust(p_raw_species, method = "holm")
+
+
+
+# Supplementary Table S9
+# Thermal limit: ED95
+# run linear model first for inspecting the data and model assumptions
+model_ED95 <- lm(
+  ED95 ~ Species * Condition,
+  data = eds_nooutliers
+)
+
+summary(model_ED95)
+anova(model_ED95)
+
+# check residuals
+par(mfrow = c(2, 2))
+plot(model_ED95)
+
+# insprect normality
+shapiro.test(residuals(model_ED95))
+# not significant
+
+#inspect homogeneity of variance
+leveneTest(
+  ED95 ~ Species * Condition,
+  data = eds_nooutliers
+)
+# significant
+
+# permutation two-way anova
+set.seed(123)
+
+# Two-way ANOVA
+model_ED95 <- aov(
+  ED95 ~ Species * Condition,
+  data = eds_nooutliers
+)
+
+# ANOVA table
+summary(model_ED95)
+# not significant
+
+
+# Supplementary Table S10
+# Decline width
+
+# prepare data
+# seperate data by species
+eds_porites_filtered <- subset(eds_combined, Species == "Porites cf. lobata")
+eds_poci_filtered    <- subset(eds_combined, Species == "Pocillopora cf. damicornis")
+
+# remove outliers of DW for porites
+# Without Outliers
+# Identify outliers in ED5 by Condition
+eds_porites_filtered_clean <- eds_porites_filtered %>%
+  group_by(Condition) %>% 
+  mutate(
+    Q1 = quantile(decline_width, 0.25, na.rm = TRUE),  
+    Q3 = quantile(decline_width, 0.75, na.rm = TRUE),  
+    IQR = Q3 - Q1,                            
+    lower = Q1 - 1.5 * IQR,                   
+    upper = Q3 + 1.5 * IQR,                   
+    is_outlier = decline_width < lower | decline_width > upper    
+  ) %>%
+  ungroup()
+
+# check outliers
+eds_porites_filtered_clean %>% filter(is_outlier == TRUE)
+
+# remove outliers
+eds_porites_nooutliers <- eds_porites_filtered_clean %>% 
+  filter(is_outlier == FALSE)
+
+# check sample number before and after removing outliers 
+eds_porites_nooutliers %>%
+  group_by(Condition) %>%
+  summarise(n = n())
+# 19, 18
+
+# remove outliers of DW for poci
+# Identify outliers in ED5 by Condition
+eds_poci_filtered_clean <- eds_poci_filtered %>%
+  group_by(Condition) %>% 
+  mutate(
+    Q1 = quantile(decline_width, 0.25, na.rm = TRUE),  
+    Q3 = quantile(decline_width, 0.75, na.rm = TRUE),  
+    IQR = Q3 - Q1,                            
+    lower = Q1 - 1.5 * IQR,                   
+    upper = Q3 + 1.5 * IQR,                   
+    is_outlier = decline_width < lower | decline_width > upper   
+  ) %>%
+  ungroup()
+
+# check outliers
+eds_poci_filtered_clean %>% filter(is_outlier == TRUE)
+
+# remove outliers
+eds_poci_nooutliers <- eds_poci_filtered_clean %>% 
+  filter(is_outlier == FALSE)
+
+
+# combine dataframes
+eds_combined_nooutliers <- bind_rows(eds_porites_nooutliers, eds_poci_nooutliers)
+
+# SUpplementary Table S10
+# 1. CHECK ASSUMPTIONS
+model_DW <- lm(
+  decline_width ~ Species * Condition,
+  data = eds_combined_nooutliers
+)
+
+summary(model_DW)
+anova(model_DW)
+
+# check residuals
+par(mfrow = c(2, 2))
+plot(model_DW)
+
+# insprect normality
+shapiro.test(residuals(model_DW))
+# significant
+
+#inspect homogeneity of variance
+leveneTest(
+  decline_width ~ Species * Condition,
+  data = eds_combined_nooutliers
+)
+# significant
+
+# permutation two-way anova
+set.seed(123)
+
+perm_DW <- aovperm(
+  decline_width ~ Species * Condition,
+  data = eds_combined_nooutliers,
+  np = 9999,
+  method = "freedman_lane"
+)
+
+perm_DW
+```
+
+## PERMANOVA ITS2
+
+```{r}
+# with absolute data
+
+#upload ITS2 profile absolute abundance
+its2_profile_ID25_abs <- read.table('/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/ITS2_Symbiont_data/ITS2_files/Symportal_files_schloma1/20251110T095501_schloma1/its2_type_profiles/657_20251121T003802_DBV_20251121T214332.profiles.relative.abund_and_meta.txt', header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+# upload metadata
+its2_metadata_ID25 <- read.xlsx('/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/ITS2_Symbiont_data/ITS2_files/Symportal_files_schloma1/20251110T095501_schloma1/its2_type_profiles/metadata_sheet_ID2025_all.xlsx')
+
+# remove not needed rows and columns
+colnames(its2_profile_ID25_abs) <- its2_profile_ID25_abs[6, ]
+
+# Remove rows 1–5, 19, and 20
+its2_profile_ID25_abs <- its2_profile_ID25_abs[-c(1:6, 107, 108), ]
+
+# Remove first column
+its2_profile_ID25_abs <- its2_profile_ID25_abs[,-1]
+
+# Rename new first column
+colnames(its2_profile_ID25_abs)[1] <- "sample_name"
+
+unique(its2_profile_ID25_abs$sample_name)
+
+# remove Porites 1-5 from shallow and deep from the dataset
+its2_profile_ID25_abs <- its2_profile_ID25_abs %>%
+  filter(
+    !sample_name %in% c(
+      "ID_GAd_Por01_deep",
+      "ID_GAd_Por02_deep",
+      "ID_GAd_Por03_deep",
+      "ID_GAd_Por04_deep",
+      "ID_GAd_Por05_deep",
+      "ID_GAd_Por01_shallow",
+      "ID_GAd_Por02_shallow",
+      "ID_GAd_Por03_shallow",
+      "ID_GAd_Por04_shallow",
+      "ID_GAd_Por05_shallow"
+  ))
+
+# remove from metadata
+its2_metadata_ID25 <- its2_metadata_ID25 %>%
+  filter(
+    !sample_name %in% c(
+      "ID_GAd_Por01_deep",
+      "ID_GAd_Por02_deep",
+      "ID_GAd_Por03_deep",
+      "ID_GAd_Por04_deep",
+      "ID_GAd_Por05_deep",
+      "ID_GAd_Por01_shallow",
+      "ID_GAd_Por02_shallow",
+      "ID_GAd_Por03_shallow",
+      "ID_GAd_Por04_shallow",
+      "ID_GAd_Por05_shallow"
+  ))
+
+# combine metadata of ed50 table 
+eds_combined <- rbind(eds_porites, eds_poc)
+
+eds_combined <- eds_combined %>% rename(sample_name = Sample_name_ITS2)
+
+# merge dataframes
+its2_ED50_data <- merge(eds_combined, its2_profile_ID25_abs, by = "sample_name", all.x = TRUE)
+
+# Convert to long format
+#its2_ED50_data_long <- its2_ED50_data %>%
+#  gather(key = "ITS2_profile", value = "value", "A4/A3-A4a-A4.3-A3ac-A4ex-A4ah":"D1/D2d-D4-D17d-D17e-D1r-D17c-D2an-D2bk-D2bj")
+
+
+# PERMANOVA
+# Bray-Curtis was used for our distance matrix and run a total 0f 9,999 permutations, and test the effects of 
+# reef depth, coral species, and the interaction between them. 
+
+# convert its 2 type profiles to numeric
+its2_ED50_data[, 17:ncol(its2_ED50_data)] <-
+  lapply(its2_ED50_data[, 17:ncol(its2_ED50_data)], as.numeric)
+
+# check data
+str(its2_ED50_data[, 17:ncol(its2_ED50_data)])
+
+# convert explanotory variables to factors
+its2_ED50_data$Condition <- as.factor(its2_ED50_data$Condition)
+str(its2_ED50_data)
+its2_ED50_data$Condition <- factor(its2_ED50_data$Condition)
+
+#seperate into metadata and its2 matrix
+metadata_its2 <- its2_ED50_data[, 1:16]
+
+its2_data <- its2_ED50_data[, c(1,17:ncol(its2_ED50_data))]
+
+# test for both species across depth
+# create rownames and remove sample name
+# Make Sample_Name the row names
+rownames(its2_data) <- its2_data$sample_name
+
+# Remove Sample_Name from the matrix
+its2_data <- its2_data[, -1]
+
+str(its2_data)
+
+# bray curtis
+bray_its2 <- vegdist(its2_data, method = "bray")
+
+set.seed(123)
+# permanova with Condition and Species
+adonis2(
+  bray_its2 ~ Condition * Species,
+  data = metadata_its2,
+  permutations = 9999,
+  by = "terms"
+)
+# absolute abundance ITS2 data: all 3 signifiacnt
+# relative abundance ITS2 data: all 3 significant
+
+
+# seperate by species
+metadata_porites <- metadata_its2 %>%
+  filter(grepl("Por", sample_name))
+
+metadata_pocillopora <- metadata_its2 %>%
+  filter(grepl("Poc", sample_name))
+
+
+# Separate ITS2 data
+# if sample_name is rownames
+its2_porites <- its2_data %>%
+  filter(grepl("Por", rownames(.)))
+
+its2_pocillopora <- its2_data %>%
+  filter(grepl("Poc", rownames(.)))
+
+# if sample name is column
+its2_porites <- its2_data %>%
+  filter(grepl("Por", sample_name))
+
+its2_pocillopora <- its2_data %>%
+  filter(grepl("Poc", sample_name))
+
+# Porites
+# Make Sample_Name the row names
+rownames(its2_porites) <- its2_porites$sample_name
+
+# Remove Sample_Name
+its2_porites <- its2_porites[, -1]
+
+# Bray-Curtis
+bray_porites <- vegdist(its2_porites, method = "bray")
+
+# PERMANOVA: Condition
+set.seed(123)
+
+adonis2(
+  bray_porites ~ Condition, # test ED50, Ed5, ED95, COndition
+  data = metadata_porites,
+  permutations = 9999,
+  by = "terms"
+)
+# absolute abundance data
+# Condition: 0.003
+# ED50: 0.0577 # with relative abundance: 0.0559
+# ED5: 0.2063
+# ED95: 0.2418
+
+# Pocillopora
+# Make Sample_Name the row names
+rownames(its2_pocillopora) <- its2_pocillopora$sample_name
+
+# Remove Sample_Name
+its2_pocillopora <- its2_pocillopora[, -1]
+
+# Bray-Curtis
+bray_pocillopora <- vegdist(its2_pocillopora, method = "bray")
+
+
+# PERMANOVA: Condition
+set.seed(123)
+
+adonis2(
+  bray_pocillopora ~ ED50,
+  data = metadata_pocillopora,
+  permutations = 9999,
+  by = "terms"
+)
+
+# conclusion: ITS2 community composition is significantly associated with variation in thermal tolerance (ED50) in Pocillopora, but not in Porites.
+```
+
+## PCoA Plot ITS2
+
+```{r}
+# all data: bray_its2, metadata_its2
+# porites: bray_porites, metadata_its2_porites
+# Pocillopora:  bray_pocillopora, metadata_its2_pocilloproa
+
+# sqrt data
+its2_bray_sqrt <- sqrt(bray_its2)
+
+# PCoA
+its2_pcoa <- cmdscale(
+  its2_bray_sqrt,
+  k = 2,
+  eig = TRUE,
+  add = TRUE
+)
+
+# Calculate variance explained
+its2_eig <- its2_pcoa$eig
+
+PCoA1_var <- round(
+  100 * its2_eig[1] / sum(its2_eig[its2_eig > 0]),
+  1
+)
+
+PCoA2_var <- round(
+  100 * its2_eig[2] / sum(its2_eig[its2_eig > 0]),
+  1
+)
+
+# Create PCoA dataframe
+its2_pcoa_df <- data.frame(
+  sample_name = rownames(its2_pcoa$points),
+  PCoA1 = its2_pcoa$points[, 1],
+  PCoA2 = its2_pcoa$points[, 2]
+)
+
+# Add metadata
+its2_pcoa_df <- its2_pcoa_df %>%
+  left_join(
+    metadata_its2,
+    by = "sample_name"
+  )
+
+# Plot
+pcoa_its2_host <- ggplot(
+  its2_pcoa_df,
+  aes(x = PCoA1, y = PCoA2, color = Species)
+) +
+  geom_point(size = 3) +
+  stat_ellipse(
+    aes(group = Species),
+    type = "norm",
+    level = 0.95,
+    linewidth = 1
+  ) +
+  facet_wrap(~ Condition) +
+  labs(
+    x = paste0("PCoA1 (", PCoA1_var, "%)"),
+    y = paste0("PCoA2 (", PCoA2_var, "%)"),
+    color = "Coral Species"
+  ) +
+  theme_classic()
+
+pcoa_its2_host
+
+# save
+ggsave("/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/Suppl_Figures/PCoA_Poc_Por_ITS2.jpg", plot = pcoa_its2_host, width = 7, height = 6, dpi = 300)
+
+ggsave("/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/Suppl_Figures/PCoA_Poc_Por_ITS2.pdf", plot = pcoa_its2_host, width = 7, height = 6, dpi = 300)
+
+# Plot
+pcoa_its2_depth <- ggplot(
+  its2_pcoa_df,
+  aes(x = PCoA1, y = PCoA2, color = Condition)
+) +
+  geom_point(size = 3) +
+  stat_ellipse(
+    aes(group = Condition),
+    type = "norm",
+    level = 0.95,
+    linewidth = 1
+  ) +
+  facet_wrap(~ Species) +
+  scale_color_manual(
+    values = c(
+      "shallow" = "lightblue",
+      "deep" = "darkblue"
+    )
+  ) +
+  labs(
+    x = paste0("PCoA1 (", PCoA1_var, "%)"),
+    y = paste0("PCoA2 (", PCoA2_var, "%)"),
+    color = "Depth Location"
+  ) +
+  theme_classic()
+
+pcoa_its2_depth
+
+# save
+ggsave("/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/Suppl_Figures/PCoA_shallow_deep_ITS2.jpg", plot = pcoa_its2_depth, width = 7, height = 6, dpi = 300)
+
+ggsave("/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/Suppl_Figures/PCoA_shallow_deep_ITS2.pdf", plot = pcoa_its2_depth, width = 7, height = 6, dpi = 300)
+
+```
+
+## PERMANOVA ASV
+
+```{r}
+# Indonesia
+# Load metadata
+samdf_ID25<- read.xlsx('/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/16S_files/2025_ID_GAd_metadata.xlsx',rowNames = TRUE)
+
+# Load ASV count table
+seqtab.nochim_ID25 <- read.xlsx('/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/16S_files/2025_ID_GAd_asv_table_filtered_onlybac.xlsx',rowNames = TRUE)
+
+seqtab.nochim_ID25 <- as.matrix(seqtab.nochim_ID25)
+
+seqtab.nochim_ID25_t <- t(seqtab.nochim_ID25)
+
+# Load taxonomy table
+taxa_ID25 <- read.xlsx('/Users/MarlenSchlotheuber/Nextcloud/10. projects/11. PhD/10. projects/Intraspecific bleaching project/Project planning/ID_2025/Data/16S_Bacterial_data/16S_files/2025_ID_GAd_taxa_table_asv_filtered_onlybac.xlsx', rowNames = TRUE)
+
+taxa_ID25 <- as.matrix(taxa_ID25)
+
+# Construct phyloseq object
+ps_ID_filtered_within <- phyloseq(
+  otu_table(seqtab.nochim_ID25_t, taxa_are_rows = FALSE),
+  sample_data(samdf_ID25),
+  tax_table(taxa_ID25)
+)
+
+# check orientation: correct when false
+taxa_are_rows(ps_ID_filtered_within)
+
+# Extract ASV table
+asv_ID <- as.data.frame(otu_table(ps_ID_filtered_within))
+
+# Check dimensions
+dim(asv_ID)
+
+# calculate relative abundance
+asv_ID_rel <- asv_ID / rowSums(asv_ID)
+
+# Extract metadata
+meta_ID <- data.frame(sample_data(ps_ID_filtered_within))
+
+
+
+# PERMANOVA Condition and Coral_Species
+# check if identical
+identical(
+  rownames(asv_ID_rel),
+  rownames(meta_ID)
+)
+# bray curtis
+
+# Bray-Curtis for all data
+bray_ASV <- vegdist(
+  asv_ID_rel,
+  method = "bray"
+)
+
+# permanova
+set.seed(123)
+
+permanova_ID <- adonis2(
+  bray_ASV ~ Condition * Coral_Species,
+  data = meta_ID,
+  permutations = 9999,
+  by = "terms"
+)
+
+permanova_ID
+
+# seperate by species
+# add sample_ID to the metadata as column
+meta_ID$Sample_ID <- rownames(meta_ID)
+
+# change name of sample_ID
+eds_combined <- eds_combined %>%
+  rename(Sample_ID = Sample_name_16S)
+
+
+#add ed50 to emta_ID based on sample_ID
+meta_ID <- meta_ID %>%
+  left_join(
+    eds_combined %>% select(Sample_ID, ED50),
+    by = "Sample_ID"
+  )
+
+# make sample id back to row names
+rownames(meta_ID) <- meta_ID$Sample_ID
+meta_ID$Sample_ID <- NULL
+
+# check that metadata matches ASV table
+identical(
+  rownames(asv_ID_rel),
+  rownames(meta_ID)
+)
+
+# Porites
+meta_porites <- meta_ID %>%
+  filter(Coral_Species == "Por")
+
+asv_porites_rel <- asv_ID_rel[
+  rownames(asv_ID_rel) %in% rownames(meta_porites),
+]
+
+# Match the order of the ASV table to the metadata
+asv_porites_rel <- asv_porites_rel[
+  rownames(meta_porites),
+]
+
+
+# Pocillopora
+meta_pocillopora <- meta_ID %>%
+  filter(Coral_Species == "Poc")
+
+asv_pocillopora_rel <- asv_ID_rel[
+  rownames(asv_ID_rel) %in% rownames(meta_pocillopora),
+]
+
+# Match the order of the ASV table to the metadata
+asv_pocillopora_rel <- asv_pocillopora_rel[
+  rownames(meta_pocillopora),
+]
+
+
+# Check that sample order matches
+identical(
+  rownames(asv_porites_rel),
+  rownames(meta_porites)
+)
+
+identical(
+  rownames(asv_pocillopora_rel),
+  rownames(meta_pocillopora)
+)
+
+
+# bray curtis seperated by species
+bray_porites <- vegdist(
+  asv_porites_rel,
+  method = "bray"
+)
+
+bray_pocillopora <- vegdist(
+  asv_pocillopora_rel,
+  method = "bray"
+)
+
+
+# PERMANOVA: ED50
+set.seed(123)
+
+permanova_porites_ED50 <- adonis2(
+  bray_porites ~ ED50,
+  data = meta_porites,
+  permutations = 9999
+)
+
+permanova_porites_ED50
+# p-value = 0.6925
+
+
+set.seed(123)
+permanova_pocillopora_ED50 <- adonis2(
+  bray_pocillopora ~ ED50,
+  data = meta_pocillopora,
+  permutations = 9999)
+
+permanova_pocillopora_ED50
+# p-value 0.4334
+```
